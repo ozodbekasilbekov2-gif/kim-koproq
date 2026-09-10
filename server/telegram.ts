@@ -345,19 +345,20 @@ async function handleTextMessage(message: TelegramMessage) {
   }
 
   if (flowState?.startsWith("chat:")) {
-    const active = await getActiveChatForUser(telegramId);
-    if (!active || String(active.id) !== flowState.slice("chat:".length)) {
+    const selectedChatId = Number(flowState.slice("chat:".length));
+    const selected = (await getHistoryForUser(telegramId)).find(item => item.chat.id === selectedChatId);
+    if (!selected || selected.chat.status !== "active") {
       await sendMessage(chatId, "Активного чата нет. Нажмите «Пообщаться», чтобы найти собеседника.", {
         replyMarkup: MAIN_MENU,
       });
       return;
     }
-    const other = await getOtherMember(active.id, telegramId);
+    const other = await getOtherMember(selected.chat.id, telegramId);
     if (!other) {
       await sendMessage(chatId, "Собеседник больше недоступен.", { replyMarkup: MAIN_MENU });
       return;
     }
-    await saveMessage(active.id, telegramId, text);
+    await saveMessage(selected.chat.id, telegramId, text);
     await sendMessage(Number(other.telegramUserId), `💬 <b>Собеседник</b>\n${escapeHtml(text)}`, {
       replyMarkup: CHAT_MENU,
       parseMode: "HTML",
