@@ -16,6 +16,9 @@ async function createQuery(): Promise<Query> {
     const sql = neon(url)
     return async (text, params = []) => (await sql.query(text, params)) as Row[]
   }
+  if (process.env.VERCEL) {
+    throw new Error('DATABASE_URL is not set. Add it in Vercel: Project Settings -> Environment Variables, then redeploy.')
+  }
   // Local fallback — PGlite (persisted under .data/)
   const modName = '@electric-sql/pglite'
   const { PGlite } = await import(/* @vite-ignore */ modName)
@@ -61,16 +64,20 @@ CREATE TABLE IF NOT EXISTS question_history (
 
 async function init() {
   const q = await createQuery()
-  for (const stmt of SCHEMA.split(';').map((s) => s.trim()).filter(Boolean)) {
-    await q(stmt)
-  }
-  const [{ n }] = await q('SELECT COUNT(*)::int AS n FROM questions')
-  if (Number(n) === 0) {
-    for (const s of SEED_QUESTIONS) {
-      await q('INSERT INTO questions (text, emoji, category, created_by) VALUES ($1, $2, $3, $4)', [
-        s.text, s.emoji, s.category, 'system',
-      ])
+  // Fast path: when the schema already exists, skip DDL + seeding so every
+  // serverless cold start costs a single round-trip instead of ~40.
+  const [{ tbl_ok }] = await q(`SELECT to_regclass('public.questions') IS NOT NULL AS tbl_ok`)
+  if (!tbl_ok) {
+    for (const stmt of SCHEMA.split(';').map((s) => s.trim()).filter(Boolean)) {
+      await q(stmt)
     }
+    const values: any[] = []
+    const rows = SEED_QUESTIONS.map((s) => {
+      const base = values.length + 1
+      values.push(s.text, s.emoji, s.category, 'system')
+      return `($${base},$${base + 1},$${base + 2},$${base + 3})`
+    })
+    await q(`INSERT INTO questions (text, emoji, category, created_by) VALUES ${rows.join(',')}`, values)
   }
   queryImpl = q
 }
