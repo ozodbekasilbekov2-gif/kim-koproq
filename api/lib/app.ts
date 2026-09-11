@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { MEMBERS, CATEGORIES } from './data'
-import { db } from './db'
-import { page } from './page'
+import { MEMBERS, CATEGORIES } from './data.js'
+import { db } from './db.js'
+import { page } from './page.js'
 
 const app = new Hono()
 app.use('/api/*', cors())

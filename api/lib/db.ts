@@ -1,7 +1,7 @@
 /// <reference types="node" />
 // Database layer: Neon Postgres in production (DATABASE_URL),
 // embedded PGlite locally when DATABASE_URL is not set.
-import { SEED_QUESTIONS } from './data'
+import { SEED_QUESTIONS } from './data.js'
 
 export type Row = Record<string, any>
 type Query = (text: string, params?: any[]) => Promise<Row[]>
