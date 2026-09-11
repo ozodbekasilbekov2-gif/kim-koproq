@@ -8,18 +8,23 @@ import {
   getHistoryForUser,
   getOtherMember,
   getTelegramUser,
+  getUserTags,
   removeChatForUser,
   revealContact,
   saveMessage,
+  saveUserTag,
   setChatName,
   setFlowState,
+  trashUserTag,
   upsertTelegramUser,
+  updateTelegramProfile,
 } from "./db";
 
 type TelegramUser = {
   id: number;
   username?: string;
   first_name?: string;
+  last_name?: string;
 };
 
 type TelegramMessage = {
@@ -53,7 +58,10 @@ type ReplyKeyboardMarkup = {
 };
 
 const MAIN_MENU: ReplyKeyboardMarkup = {
-  keyboard: [[{ text: "💬 Пообщаться" }, { text: "🗂 История чатов" }]],
+  keyboard: [
+    [{ text: "💬 Пообщаться" }, { text: "🗂 История чатов" }],
+    [{ text: "👤 Профиль" }, { text: "🏷 Мои теги" }],
+  ],
   resize_keyboard: true,
   is_persistent: true,
 };
@@ -61,11 +69,24 @@ const MAIN_MENU: ReplyKeyboardMarkup = {
 const CHAT_MENU: ReplyKeyboardMarkup = {
   keyboard: [
     [{ text: "🤝 Представить контакты" }, { text: "⏭ Новый собеседник" }],
-    [{ text: "🗂 История чатов" }],
+    [{ text: "🗂 История чатов" }, { text: "👤 Профиль" }],
+    [{ text: "🏷 Мои теги" }],
   ],
   resize_keyboard: true,
   is_persistent: true,
 };
+
+const PROFILE_MENU: InlineKeyboardMarkup = {
+  inline_keyboard: [
+    [{ text: "✏️ Изменить имя", callback_data: "profile-name" }],
+    [{ text: "◼️ Выбрать иконку", callback_data: "profile-icon" }, { text: "🎨 Выбрать цвет", callback_data: "profile-color" }],
+    [{ text: "🏷 Управление тегами", callback_data: "tags" }],
+    [{ text: "‹ Назад", callback_data: "main" }],
+  ],
+};
+
+const PROFILE_ICONS = ["message-circle", "heart-handshake", "music-2", "palette", "briefcase-business", "camera", "leaf", "sparkles"];
+const PROFILE_COLORS = ["#6d5dfc", "#e35d6a", "#1da89b", "#e59b42", "#4f86f7", "#9b6de3"];
 
 function telegramUserId(user: TelegramUser) {
   return String(user.id);
@@ -148,6 +169,41 @@ async function showMainMenu(chatId: number, greeting = false) {
     ? "<b>Анонимные чаты</b>\n\nЗдесь можно спокойно познакомиться и общаться без раскрытия имени. Ваш Telegram ID скрыт от собеседника.\n\nКогда появится доверие, вы сможете отправить контакт только по своему желанию."
     : "Главное меню. Выберите действие ниже.";
   await sendMessage(chatId, text, { replyMarkup: MAIN_MENU, parseMode: "HTML" });
+}
+
+async function showProfile(chatId: number, telegramId: string) {
+  const profile = await getTelegramUser(telegramId);
+  const tags = await getUserTags(telegramId);
+  const displayName = profile?.displayName || profile?.firstName || "Аноним";
+  await sendMessage(
+    chatId,
+    `<b>Ваш профиль</b>\n\nИмя в Mini App: <b>${escapeHtml(displayName)}</b>\nИконка: <code>${escapeHtml(profile?.iconKey ?? "message-circle")}</code>\nЦвет: <code>${escapeHtml(profile?.accentColor ?? "#6d5dfc")}</code>\n\nВаши теги: ${tags.length ? tags.map(tag => `#${escapeHtml(tag.label)}`).join(" · ") : "пока нет"}\n\nTelegram ID и username не показываются собеседнику автоматически.`,
+    { replyMarkup: PROFILE_MENU, parseMode: "HTML" }
+  );
+}
+
+async function showTags(chatId: number, telegramId: string) {
+  const tags = await getUserTags(telegramId);
+  const rows = tags.slice(0, 20).map(tag => [{ text: `Удалить #${tag.label}`, callback_data: `tag-delete:${tag.id}` }]);
+  rows.push([{ text: "＋ Добавить тег", callback_data: "tag-add" }]);
+  rows.push([{ text: "‹ Профиль", callback_data: "profile" }]);
+  await sendMessage(
+    chatId,
+    `<b>Мои теги</b>\n\n${tags.length ? tags.map(tag => `#${escapeHtml(tag.label)}`).join(" · ") : "Тегов пока нет."}\n\nОбщие теги помогают находить более подходящих анонимных собеседников.`,
+    { replyMarkup: { inline_keyboard: rows }, parseMode: "HTML" }
+  );
+}
+
+async function showProfileIconPicker(chatId: number) {
+  const rows = PROFILE_ICONS.map(icon => [{ text: icon, callback_data: `profile-icon:${icon}` }]);
+  rows.push([{ text: "‹ Профиль", callback_data: "profile" }]);
+  await sendMessage(chatId, "Выберите профессиональную иконку профиля:", { replyMarkup: { inline_keyboard: rows } });
+}
+
+async function showProfileColorPicker(chatId: number) {
+  const rows = PROFILE_COLORS.map(color => [{ text: color, callback_data: `profile-color:${color}` }]);
+  rows.push([{ text: "‹ Профиль", callback_data: "profile" }]);
+  await sendMessage(chatId, "Выберите цвет профиля:", { replyMarkup: { inline_keyboard: rows } });
 }
 
 async function showHistory(chatId: number, telegramId: string) {
@@ -323,8 +379,31 @@ async function handleTextMessage(message: TelegramMessage) {
     await handleReveal(chatId, telegramId);
     return;
   }
+  if (text === "👤 Профиль" || text === "/profile") {
+    await setFlowState(telegramId, null);
+    await showProfile(chatId, telegramId);
+    return;
+  }
+  if (text === "🏷 Мои теги" || text === "/tags") {
+    await setFlowState(telegramId, null);
+    await showTags(chatId, telegramId);
+    return;
+  }
 
   const flowState = await getFlowState(telegramId);
+  if (flowState === "profile-name") {
+    const name = text.slice(0, 120);
+    await updateTelegramProfile(telegramId, { displayName: name });
+    await setFlowState(telegramId, null);
+    await sendMessage(chatId, `Имя профиля сохранено: <b>${escapeHtml(name)}</b>`, { replyMarkup: PROFILE_MENU, parseMode: "HTML" });
+    return;
+  }
+  if (flowState === "tag-add") {
+    await saveUserTag(telegramId, text.slice(0, 48));
+    await setFlowState(telegramId, null);
+    await showTags(chatId, telegramId);
+    return;
+  }
   if (flowState?.startsWith("rename:")) {
     const selectedChatId = Number(flowState.slice("rename:".length));
     await setChatName(selectedChatId, telegramId, text.slice(0, 80));
@@ -397,6 +476,50 @@ async function handleCallbackQuery(query: TelegramCallbackQuery) {
   }
   if (data === "main") {
     await showMainMenu(chatId);
+    return;
+  }
+  if (data === "profile") {
+    await showProfile(chatId, telegramId);
+    return;
+  }
+  if (data === "tags") {
+    await showTags(chatId, telegramId);
+    return;
+  }
+  if (data === "profile-name") {
+    await setFlowState(telegramId, "profile-name");
+    await sendMessage(chatId, "Введите новое имя профиля (до 120 символов):", { replyMarkup: MAIN_MENU });
+    return;
+  }
+  if (data === "profile-icon") {
+    await showProfileIconPicker(chatId);
+    return;
+  }
+  if (data === "profile-color") {
+    await showProfileColorPicker(chatId);
+    return;
+  }
+  if (data.startsWith("profile-icon:")) {
+    const iconKey = data.slice("profile-icon:".length);
+    if (PROFILE_ICONS.includes(iconKey)) await updateTelegramProfile(telegramId, { iconKey });
+    await showProfile(chatId, telegramId);
+    return;
+  }
+  if (data.startsWith("profile-color:")) {
+    const accentColor = data.slice("profile-color:".length);
+    if (PROFILE_COLORS.includes(accentColor)) await updateTelegramProfile(telegramId, { accentColor });
+    await showProfile(chatId, telegramId);
+    return;
+  }
+  if (data === "tag-add") {
+    await setFlowState(telegramId, "tag-add");
+    await sendMessage(chatId, "Введите тег, например: кино или путешествия. Символ # добавлять необязательно.", { replyMarkup: MAIN_MENU });
+    return;
+  }
+  if (data.startsWith("tag-delete:")) {
+    const tagId = Number(data.slice("tag-delete:".length));
+    if (Number.isInteger(tagId)) await trashUserTag(telegramId, tagId);
+    await showTags(chatId, telegramId);
     return;
   }
   const [action, rawChatId] = data.split(":");
