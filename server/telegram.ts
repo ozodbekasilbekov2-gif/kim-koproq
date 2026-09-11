@@ -123,6 +123,14 @@ async function sendMessage(
   });
 }
 
+export async function sendTelegramText(
+  chatId: number,
+  text: string,
+  options: { replyMarkup?: ReplyKeyboardMarkup | InlineKeyboardMarkup; parseMode?: "HTML" } = {}
+) {
+  return sendMessage(chatId, text, options);
+}
+
 async function answerCallbackQuery(id: string, text?: string) {
   await telegramApi("answerCallbackQuery", { callback_query_id: id, text, show_alert: false });
 }

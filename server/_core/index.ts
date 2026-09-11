@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerTelegramRoutes } from "../telegram";
+import { registerMiniAppRoutes } from "../miniapp";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -35,6 +36,7 @@ async function startServer() {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   registerTelegramRoutes(app);
+  registerMiniAppRoutes(app);
   app.use(
     "/api/trpc",
     createExpressMiddleware({
