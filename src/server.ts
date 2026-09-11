@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // Local / generic Node server
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
