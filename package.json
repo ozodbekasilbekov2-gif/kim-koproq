@@ -2,7 +2,7 @@
   "name": "webapp",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "npm run clean-port && tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "clean-port": "fuser -k 3000/tcp 2>/dev/null || true"
