@@ -7,3 +7,5 @@ dist/
 tmp/
 .pm2/
 *.tar.gz
+.data/
+.vercel/

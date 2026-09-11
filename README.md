@@ -1,51 +1,47 @@
-# Kim ko'proq...? — Guruh so'rovi
+# Kim ko'proq...? — 2AF1 guruh so'rovi
 
-## Project Overview
-- **Name**: Kim ko'proq...? (Who is most likely to...?)
-- **Goal**: Fun "friend group survey" web app for a class of 24 members. Each member picks themselves, answers 54 Uzbek questions by choosing a classmate, and everyone can view the aggregated results with winner photos.
-- **Features**:
-  - Pick yourself (photo + name grid) to start
-  - 54 Uzbek questions in 5 categories: Kelajak, Kulgili, Xaotik, Muhabbat, Bahsli
-  - One classmate per question (you can't vote for yourself), progress bar, back/next
-  - Progress saved to D1 + localStorage — resume later on the same device
-  - Results page: winner photo + crown, vote %, runner-up avatars, category filters, "Odamlar bo'yicha" view (who won which questions)
-  - Live counters: how many people voted / finished
+Telegram-style "Who is most likely to…" survey for the 2AF1 group (27 members, A/B groups).
 
-## URLs
-- **Sandbox preview**: https://3000-ivvddfzl8kbpus1xeh9e9-ad490db5.sandbox.novita.ai
-- **Production**: not deployed yet
+## Features
+- Pick yourself (photo grid, A/B groups; 3 members without photo show a 🕵️ MAFIA card)
+- ~29 creative Uzbek questions (Roast / Rostini ayt / Kelajak / Xaos) — **anyone can add, edit or delete** questions; author & editor are shown, full history is kept
+- Per question: pick one person from **your own group (required)** and optionally from the other group
+- Progress saved server-side, resume on any device by picking yourself again
+- Results like a Telegram poll: % bars, vote counts, voter avatars, tap an option to see **who voted**, "Odamlar" tab = who won which question
 
-## API
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/meta` | members + questions |
-| GET | `/api/progress/:voter` | answers already given by a voter |
-| POST | `/api/vote` | `{voter, question, target}` upsert one vote |
-| POST | `/api/votes` | `{voter, answers:{qid: target}}` bulk upsert |
-| GET | `/api/results` | aggregated votes per question + voter counters |
-| GET | `/api/results/:member` | which questions a member got votes on |
+## Stack
+- Hono (TypeScript) · Vercel serverless (`api/index.ts`) · Neon Postgres (`@neondatabase/serverless`)
+- Local dev uses embedded PGlite when `DATABASE_URL` is not set — no setup needed
+- Vanilla JS frontend + Tailwind CDN (`public/static/`)
 
-## Data Architecture
-- **Storage**: Cloudflare D1 (SQLite) — table `votes(voter_id, question_id, target_id)` with `UNIQUE(voter_id, question_id)`
-- **Static data**: members & questions in `src/data.ts`; member photos in `public/static/members/*.jpg` (cropped from the group photo)
-- **Identity**: no auth — user picks who they are; choice stored in localStorage (`kk_me`). "Change person" button in header.
-
-## User Guide
-1. Open the site → choose your own photo → **Boshlash**
-2. For each question, tap a classmate → **Keyingi**
-3. After the last question → **Natijalarni ko'rish**. Anyone can open **Natijalar** from the header at any time.
-
-## Local Development
+## Run locally
 ```bash
-npm run build
-npx wrangler d1 migrations apply webapp-production --local
-pm2 start ecosystem.config.cjs
-# reset votes
-npx wrangler d1 execute webapp-production --local --command="DELETE FROM votes"
+npm install
+npm run dev          # http://localhost:3000  (PGlite data in .data/)
+# or with Neon:
+DATABASE_URL=postgresql://... npm run dev
 ```
 
-## Deployment
-- **Platform**: Cloudflare Pages + D1
-- **Status**: ⏳ sandbox only (needs `wrangler d1 create webapp-production` and `database_id` in `wrangler.jsonc` before production deploy)
-- **Tech Stack**: Hono + TypeScript + Vanilla JS + TailwindCSS (CDN)
-- **Last Updated**: 2026-09-11
+## Deploy (Vercel + Neon)
+1. Create a Neon project → copy the pooled connection string
+2. Import this repo in Vercel (framework: **Other**, no build command, output dir empty)
+3. Vercel → Settings → Environment Variables → `DATABASE_URL` = Neon connection string
+4. Deploy. Tables & seed questions are created automatically on first request.
+
+## API
+| Method | Path | Body / notes |
+|---|---|---|
+| GET | `/api/meta` | members, questions, categories |
+| GET | `/api/progress/:voter` | `{answers: {qid: {A?, B?}}}` |
+| POST | `/api/vote` | `{voter, question, targets: {A?: id\|null, B?: id\|null}}` |
+| GET | `/api/results` | `{voters, completed, results: {qid: {A: {target: [voters]}, B: …}}}` |
+| POST | `/api/questions` | `{actor, text, emoji, category}` |
+| PUT | `/api/questions/:id` | `{actor, text?, emoji?, category?}` |
+| DELETE | `/api/questions/:id?actor=` | soft delete |
+| GET | `/api/questions/history` | last 100 changes |
+
+## Data
+- `questions(id, text, emoji, category, created_by, updated_by, deleted_by, deleted_at, …)`
+- `votes(voter_id, question_id, target_id, target_group)` — unique per voter/question/group
+- `question_history(question_id, action, actor, old_text, new_text, at)`
+- Members are static in `src/data.ts`; photos in `public/static/members/`
