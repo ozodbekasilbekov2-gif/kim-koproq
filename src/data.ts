@@ -1,0 +1,96 @@
+export type Member = { id: string; name: string; short: string }
+
+export const MEMBERS: Member[] = [
+  { id: 'oripova-kamola', name: 'Oripova Kamola', short: 'Kamola' },
+  { id: 'abdiyozov-shodiyor', name: 'Abdiyozov Shodiyor', short: 'Shodiyor' },
+  { id: 'abduakimov-alimjan', name: 'Abduakimov Alimjan', short: 'Alimjan' },
+  { id: 'abdughanixojayev-umarxoja', name: "Abdug'anixo'jayev Umarxo'ja", short: "Umarxo'ja" },
+  { id: 'abdumalikov-ravshanjon', name: 'Abdumalikov Ravshanjon', short: 'Ravshanjon' },
+  { id: 'abduqodirova-nargis', name: 'Abduqodirova Nargis', short: 'Nargis' },
+  { id: 'abdurahmonov-shahboz', name: 'Abdurahmonov Shahboz', short: 'Shahboz' },
+  { id: 'akarsu-mehmetcan', name: 'Akarsu Mehmetcan', short: 'Mehmetcan' },
+  { id: 'anvarjonov-yusufbek', name: 'Anvarjonov Yusufbek', short: 'Yusufbek' },
+  { id: 'asilbekov-ozodbek', name: 'Asilbekov Ozodbek', short: 'Ozodbek A.' },
+  { id: 'dadiljonova-samira', name: 'Dadiljonova Samira', short: 'Samira' },
+  { id: 'isanov-suxrobbek', name: 'Isanov Suxrobbek', short: 'Suxrobbek' },
+  { id: 'ismadiyorov-doniyorbek', name: 'Ismadiyorov Doniyorbek', short: 'Doniyorbek' },
+  { id: 'isomiddinov-muhammadyusuf', name: 'Isomiddinov Muhammad Yusuf', short: 'M. Yusuf' },
+  { id: 'erkinov-murodjon', name: 'Erkinov Murodjon', short: 'Murodjon' },
+  { id: 'ochilov-ulugbek', name: "Ochilov Ulug'bek", short: "Ulug'bek" },
+  { id: 'odilov-mukhammaddiyor', name: 'Odilov Mukhammaddiyor', short: 'Mukhammaddiyor' },
+  { id: 'qobiljonova-ezoza', name: 'Qobiljonova Ezoza', short: 'Ezoza' },
+  { id: 'rustamov-ibrohim', name: 'Rustamov Ibrohim', short: 'Ibrohim' },
+  { id: 'saidkarimova-xonzoda', name: 'Saidkarimova Xonzoda', short: 'Xonzoda' },
+  { id: 'shokirjonov-muhammad', name: 'Shokirjonov Muhammad', short: 'Muhammad' },
+  { id: 'tursunboyev-samandar', name: 'Tursunboyev Samandar', short: 'Samandar' },
+  { id: 'tursunmamatov-barkamol', name: 'Tursunmamatov Barkamol', short: 'Barkamol' },
+  { id: 'ulugbekov-ozodbek', name: "Ulug'bekov Ozodbek", short: 'Ozodbek U.' },
+]
+
+export type Question = { id: number; text: string; emoji: string; category: string }
+
+export const QUESTIONS: Question[] = [
+  // 🔮 Kelajak
+  { id: 1, text: 'Kim birinchi bo\'lib turmush quradi?', emoji: '💍', category: 'Kelajak' },
+  { id: 2, text: 'Kim millioner bo\'ladi?', emoji: '💰', category: 'Kelajak' },
+  { id: 3, text: 'Kim mashhur bo\'ladi?', emoji: '⭐', category: 'Kelajak' },
+  { id: 4, text: 'Kim siyosatchi bo\'ladi?', emoji: '🏛️', category: 'Kelajak' },
+  { id: 5, text: 'Kim o\'qituvchi bo\'lib qaytadi?', emoji: '👨‍🏫', category: 'Kelajak' },
+  { id: 6, text: 'Kim TikTokda mashhur bo\'ladi?', emoji: '📱', category: 'Kelajak' },
+  { id: 7, text: 'Kim boshqa davlatga ko\'chib ketib, qaytib kelmaydi?', emoji: '✈️', category: 'Kelajak' },
+  { id: 8, text: 'Kim 5+ farzandli bo\'ladi?', emoji: '👶', category: 'Kelajak' },
+  { id: 9, text: 'Kim milliarder bo\'lsa ham xasis bo\'lib qoladi?', emoji: '🪙', category: 'Kelajak' },
+  { id: 10, text: 'Kim diktator bo\'ladi? 💀', emoji: '👑', category: 'Kelajak' },
+
+  // 😂 Kulgili
+  { id: 11, text: 'Kim ahmoqona ish uchun hibsga olinadi?', emoji: '🚔', category: 'Kulgili' },
+  { id: 12, text: 'Kim hech kimga aytmasdan 3 kunga g\'oyib bo\'ladi?', emoji: '🕵️', category: 'Kulgili' },
+  { id: 13, text: 'Kim imtihon vaqtida uxlab qoladi?', emoji: '😴', category: 'Kulgili' },
+  { id: 14, text: 'Kim 1000$ ni mutlaqo keraksiz narsaga sarflaydi?', emoji: '🛍️', category: 'Kulgili' },
+  { id: 15, text: 'Kim "kelyapman" deb hali ham yotoqda yotadi?', emoji: '🛏️', category: 'Kulgili' },
+  { id: 16, text: 'Kim darsdan qochish uchun kasal bo\'lib ko\'rinadi?', emoji: '🤧', category: 'Kulgili' },
+  { id: 17, text: 'Kim darsdan haydaladi?', emoji: '🚪', category: 'Kulgili' },
+  { id: 18, text: 'Kim "bu safar jiddiy" deb, dietani buzadi?', emoji: '🍔', category: 'Kulgili' },
+  { id: 19, text: 'Kim janjal boshlab, qandaydir yo\'l bilan g\'olib chiqadi?', emoji: '🥊', category: 'Kulgili' },
+  { id: 20, text: 'Kim eng ko\'p g\'iybat tarqatadi?', emoji: '🗣️', category: 'Kulgili' },
+
+  // 💀 Xaotik
+  { id: 21, text: 'Kim zombi apokalipsisida omon qoladi?', emoji: '🧟', category: 'Xaotik' },
+  { id: 22, text: 'Kim butun guruhni 1 million dollarga sotadi?', emoji: '💸', category: 'Xaotik' },
+  { id: 23, text: 'Kim qamoqda eng uzoq omon qoladi?', emoji: '⛓️', category: 'Xaotik' },
+  { id: 24, text: 'Kim tasodifan 3-jahon urushini boshlab yuboradi?', emoji: '☢️', category: 'Xaotik' },
+  { id: 25, text: 'Kim jinoyat olamining aqlli boshlig\'i bo\'ladi?', emoji: '🎭', category: 'Xaotik' },
+  { id: 26, text: 'Kim yashirin ravishda eng ko\'p pulga ega?', emoji: '🤫', category: 'Xaotik' },
+  { id: 27, text: 'Kim omon qolish o\'yinida guruhga birinchi xiyonat qiladi?', emoji: '🔪', category: 'Xaotik' },
+  { id: 28, text: 'Kim eng g\'alati yashirin hayotga ega?', emoji: '🎪', category: 'Xaotik' },
+  { id: 29, text: 'Kim yashirin josus bo\'ladi?', emoji: '🕶️', category: 'Xaotik' },
+  { id: 30, text: 'Kim favqulodda vaziyatda mutlaqo foydasiz bo\'ladi?', emoji: '🆘', category: 'Xaotik' },
+  { id: 31, text: 'Kim faqat omad bilan omon qoladi?', emoji: '🍀', category: 'Xaotik' },
+  { id: 32, text: 'Kim internetda "cancel" qilinadi?', emoji: '📵', category: 'Xaotik' },
+
+  // ❤️ Muhabbat
+  { id: 33, text: 'Kim birinchi bo\'lib sevib qoladi?', emoji: '❤️', category: 'Muhabbat' },
+  { id: 34, text: 'Kimda eng dramatik ajralish bo\'ladi?', emoji: '💔', category: 'Muhabbat' },
+  { id: 35, text: 'Kim yashirincha shu yerdagi kimgadir oshiq?', emoji: '👀', category: 'Muhabbat' },
+  { id: 36, text: 'Kim tunda soat 2 da eksiga yozadi?', emoji: '🌙', category: 'Muhabbat' },
+  { id: 37, text: 'Kim birinchi muhabbatiga turmushga chiqadi/uylanadi?', emoji: '💑', category: 'Muhabbat' },
+  { id: 38, text: 'Kim kecha tanishgan odam bilan tasodifan turmush quradi?', emoji: '⚡', category: 'Muhabbat' },
+  { id: 39, text: 'Kim bilan uchrashish eng yomon bo\'lardi?', emoji: '🚩', category: 'Muhabbat' },
+  { id: 40, text: 'Kim bilan uchrashish eng zo\'r bo\'lardi?', emoji: '💚', category: 'Muhabbat' },
+
+  // 🧨 Bahsli
+  { id: 41, text: 'Kim o\'zini haqiqatdan ham aqlliroq deb o\'ylaydi?', emoji: '🧠', category: 'Bahsli' },
+  { id: 42, text: 'Kimda eng katta ego bor?', emoji: '🪞', category: 'Bahsli' },
+  { id: 43, text: 'Kim yashirincha eng sezgir odam?', emoji: '🥺', category: 'Bahsli' },
+  { id: 44, text: 'Kim odamlarni eng yaxshi manipulyatsiya qila oladi?', emoji: '🎯', category: 'Bahsli' },
+  { id: 45, text: 'Kim bilan bir uyda yashash eng qiyin bo\'lardi?', emoji: '🏠', category: 'Bahsli' },
+  { id: 46, text: 'Kim eng yomon prezident bo\'lardi?', emoji: '🗳️', category: 'Bahsli' },
+  { id: 47, text: 'Kim "Men aytgandim!" deb birinchi aytadi?', emoji: '☝️', category: 'Bahsli' },
+  { id: 48, text: 'Kim befarq ko\'rinadi, lekin aslida eng ko\'p qayg\'uradi?', emoji: '🎭', category: 'Bahsli' },
+  { id: 49, text: 'Kimga hayotingizni ishonib topshirardingiz?', emoji: '🛡️', category: 'Bahsli' },
+  { id: 50, text: 'Kimga hech qachon sir aytmas edingiz?', emoji: '🤐', category: 'Bahsli' },
+  { id: 51, text: 'Kim guruhning "yashil bayrog\'i" (eng ishonchli odam)?', emoji: '💚', category: 'Bahsli' },
+  { id: 52, text: 'Kim eng jahli tez?', emoji: '🔥', category: 'Bahsli' },
+  { id: 53, text: 'Kim eng yaxshi kiyinadi?', emoji: '👔', category: 'Bahsli' },
+  { id: 54, text: 'Kim eng "qimmat" odam (hashamatni sevadi)?', emoji: '💎', category: 'Bahsli' },
+]
