@@ -6,6 +6,10 @@ import { page } from './page.js'
 
 const app = new Hono()
 app.use('/api/*', cors())
+app.onError((error, c) => {
+  console.error('[kim-koproq] request failed:', error)
+  return c.json({ error: 'Server vaqtincha ishlamayapti. DATABASE_URL sozlamasini tekshiring.' }, 503)
+})
 
 const memberById = new Map(MEMBERS.map((m) => [m.id, m]))
 const isMember = (id: unknown): id is string => typeof id === 'string' && memberById.has(id)

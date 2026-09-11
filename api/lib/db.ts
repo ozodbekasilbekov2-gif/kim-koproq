@@ -83,7 +83,17 @@ async function init() {
 }
 
 export async function db(): Promise<Query> {
-  if (!ready) ready = init()
+  if (!process.env.DATABASE_URL && process.env.VERCEL === '1') {
+    throw new Error('DATABASE_URL is required in the Vercel deployment environment')
+  }
+  if (!ready) {
+    ready = init().catch((error) => {
+      ready = null
+      queryImpl = null
+      throw error
+    })
+  }
   await ready
-  return queryImpl!
+  if (!queryImpl) throw new Error('Database initialization did not produce a query client')
+  return queryImpl
 }
