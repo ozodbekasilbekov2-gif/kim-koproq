@@ -39,6 +39,7 @@ model User {
   votes         Vote[]
   sessions      Session[]
   accounts      Account[]
+  tgBindings    TelegramBinding[]
 }
 
 model Account {
@@ -141,6 +142,7 @@ model Avatar {
   updatedAt  DateTime @default(now()) @updatedAt
 
   votes      Vote[]
+  tgBindings TelegramBinding[]
 
   @@index([groupId])
   @@index([ownerId])
@@ -178,4 +180,48 @@ model Vote {
   @@unique([voterId, questionId, groupId])
   @@index([setId, questionId])
   @@index([voterId])
+}
+
+// ---------------- Telegram bot tables ----------------
+// Binding: chat_id → user_id + avatar_id (which member the Telegram user is)
+model TelegramBinding {
+  chatId    String   @id // Telegram chat_id as string
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatarId  String?
+  avatar    Avatar?  @relation(fields: [avatarId], references: [id], onDelete: SetNull)
+  tgName    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([userId])
+}
+
+// Multi-step conversation state (create/edit question via chat)
+model TgSession {
+  chatId    String   @id
+  state     String
+  payload   Json?
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+// Registry of native polls sent by the bot: maps Telegram poll_id →
+// (question, group, avatar id per option index) so poll_answer updates
+// can be written back into the votes table.
+model TgPoll {
+  pollId           String   @id
+  questionId       String
+  targetGroup      String
+  optionAvatarIds  Json     // array of avatar ids
+  chatId           String?
+  createdAt        DateTime @default(now())
+
+  @@index([questionId])
+}
+
+// Webhook dedupe: Telegram retries deliveries on timeout; this makes
+// processing idempotent (fan-outs never duplicate).
+model TgUpdate {
+  updateId   String   @id
+  processedAt DateTime @default(now())
 }

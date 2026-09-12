@@ -1,18 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { normalizeBotToken } from "@/lib/telegram";
+import { normalizeBotToken, handleUpdate } from "@/lib/telegram-bot";
 
 /**
- * Telegram bot webhook endpoint.
- * Currently the bot only forwards users to the Mini App via inline keyboard.
- * Full bot logic with native polls can be added later — this endpoint
- * keeps the bot webhook contract so Telegram accepts the URL.
+ * Telegram bot webhook endpoint — restored from original 2AF1 implementation.
+ *
+ * Bot features (commit 9456ada):
+ *   /start, /menu, /cancel, /who commands
+ *   ✏️ Savollarni tahrirlash: create / edit / delete questions via chat
+ *   👥 Guruhni tanlash: send native Telegram polls for A or B group
+ *   poll_answer updates sync to site's votes table
+ *   Multi-step conversation state stored in TgSession table
+ *   Webhook deliveries deduped via TgUpdate table
+ *
+ * Secret validation: X-Telegram-Bot-Api-Secret-Token header must match
+ * sha256(token + "|kim-koproq").slice(0, 48).
  */
+export const maxDuration = 60; // native-poll fan-out is paced; headroom under serverless limit
+
 export async function POST(req: NextRequest) {
   const token = normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN);
   if (!token) {
+    console.error("[tg-webhook] TELEGRAM_BOT_TOKEN is not set or invalid");
     return NextResponse.json({ error: "Bot token not set" }, { status: 500 });
   }
+
+  // Validate webhook secret
   const secret = req.headers.get("x-telegram-bot-api-secret-token");
   const expectedSecret = createHash("sha256")
     .update(token + "|kim-koproq")
@@ -20,6 +33,11 @@ export async function POST(req: NextRequest) {
     .slice(0, 48);
 
   if (!secret || secret !== expectedSecret) {
+    const got = secret ? secret.slice(0, 8) + "…" : "none";
+    const exp = expectedSecret.slice(0, 8) + "…";
+    console.error(
+      `[tg-webhook] secret mismatch: got=${got} expected=${exp} (token mask ${token.slice(0, 4)}…${token.slice(-4)}, len ${token.length})`
+    );
     return NextResponse.json({ error: "bad secret" }, { status: 401 });
   }
 
@@ -31,45 +49,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Handle /start command — send a button that opens the Mini App
-    if (update.message?.text === "/start" || update.message?.text?.startsWith("/start ")) {
-      const chatId = update.message.chat.id;
-      const tgToken = token;
-      const miniAppUrl = process.env.NEXT_PUBLIC_MINI_APP_URL || process.env.NEXTAUTH_URL || "https://kim-koproq.vercel.app";
-
-      const payload = {
-        chat_id: chatId,
-        text: "👋 Salom!\n\nBu bot orqali \"Kim ko'proq?\" testlarini yaratasan, odamlarni qo'shasan va ovoz berib natijalarni ko'rasan.\n\nQuyidagi tugmani bosing 👇",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "🚀 Mini App ni ochish",
-                web_app: { url: miniAppUrl },
-              },
-            ],
-          ],
-        },
-      };
-
-      await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    }
-
-    // Handle callback_query for inline button taps
-    if (update.callback_query) {
-      const cbId = update.callback_query.id;
-      await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ callback_query_id: cbId }),
-      });
-    }
+    await handleUpdate(update);
   } catch (e: any) {
-    console.error("[telegram/webhook] error:", e);
+    console.error("[tg-webhook] update failed:", e);
   }
 
   return NextResponse.json({ ok: true });
@@ -77,10 +59,11 @@ export async function POST(req: NextRequest) {
 
 export async function GET() {
   const token = normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN);
-  const mask = token ? `${token.slice(0, 4)}…${token.slice(-4)}` : "(not set)";
+  const mask = token ? `${token.slice(0, 4)}…${token.slice(-4)} (len ${token.length})` : "(not set)";
   return NextResponse.json({
     status: "ok",
     bot: mask,
-    message: "Telegram webhook is live. Configure webhook with: POST https://api.telegram.org/bot<TOKEN>/setWebhook?url=<URL>/api/telegram/webhook&secret_token=<SECRET>",
+    message: "Telegram webhook is live. Configure webhook with:",
+    command: `curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" -d "url=https://your-app.vercel.app/api/telegram/webhook" -d "secret_token=$(echo -n '<TOKEN>|kim-koproq' | sha256sum | cut -c1-48)"`,
   });
 }
