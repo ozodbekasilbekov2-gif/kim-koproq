@@ -45,6 +45,7 @@ export type AvatarData = {
   iconName?: string | null;
   groupId?: string | null;
   group?: { id: string; name: string; color: string } | null;
+  isDemo?: boolean; // true if this is one of the 27 2AF1 demo members
 };
 
 export type GroupData = {
@@ -211,13 +212,21 @@ export function AvatarsPage({
           {filtered.map((a) => {
             const isSelected = selectedIds.includes(a.id);
             const Icon = getIcon(a.iconName);
+            const isDemo = (a as any).isDemo === true;
             return (
               <Card
                 key={a.id}
-                className={`relative p-3 cursor-pointer transition-all hover:shadow-md ${
-                  isSelected ? "ring-2 ring-ring" : ""
-                }`}
+                className={`relative p-3 transition-all ${
+                  isDemo
+                    ? "opacity-90 cursor-default"
+                    : "cursor-pointer hover:shadow-md"
+                } ${isSelected ? "ring-2 ring-ring" : ""}`}
                 onClick={() => {
+                  if (isDemo && mode !== null) {
+                    toast.error("Demo avatarni o'zgartirib bo'lmaydi");
+                    return;
+                  }
+                  if (isDemo) return; // demo avatars are read-only
                   if (mode === "edit") {
                     setEditingAvatar(a);
                     onClearSelection();
@@ -245,11 +254,18 @@ export function AvatarsPage({
                         {a.name}
                       </div>
                     )}
-                    {a.group && (
-                      <Badge variant="outline" className="text-[9px] mt-1">
-                        {a.group.name}
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-1 justify-center mt-1 flex-wrap">
+                      {a.group && (
+                        <Badge variant="outline" className="text-[9px]">
+                          {a.group.name}
+                        </Badge>
+                      )}
+                      {isDemo && (
+                        <Badge className="text-[8px] bg-brand-lime/20 text-brand-lime border border-brand-lime/30">
+                          2AF1
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {isSelected && (

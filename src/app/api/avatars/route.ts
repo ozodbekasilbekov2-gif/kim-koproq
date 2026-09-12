@@ -1,16 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
+import { ensureDemoSeed, getDemoUserId } from "@/lib/demo-seed";
 
+// GET /api/avatars — returns the current user's avatars PLUS the 27 demo avatars
+// from the system "2af1-demo-user". This ensures everyone can see and use the
+// 27 original 2AF1 members in tests, even on first visit / new registration.
+//
+// Optional query param: ?setId=xxx — if provided, loads avatars from that set's
+// owner instead (useful when taking a test in someone else's set).
 export async function GET(req: NextRequest) {
+  // Ensure the demo data exists (27 avatars + groups + set + questions)
+  try {
+    await ensureDemoSeed();
+  } catch (e) {
+    console.error("[avatars GET] demo seed failed:", e);
+  }
+
   const user = await getCurrentUserDb(req);
-  if (!user) return NextResponse.json({ avatars: [] });
+
+  // Determine which owners' avatars to load:
+  // 1. The demo user (always — for the 27 2AF1 members)
+  // 2. The current user (if logged in — for their own custom avatars)
+  // 3. A specific set's owner (if ?setId= is provided)
+  const ownerIds: string[] = [];
+
+  // Always include the demo user's avatars
+  const demoUserId = await getDemoUserId();
+  if (demoUserId) ownerIds.push(demoUserId);
+
+  // Include the current user's avatars
+  if (user) ownerIds.push(user.id);
+
+  // Include a specific set's owner if requested
+  const setId = req.nextUrl.searchParams.get("setId");
+  if (setId) {
+    const set = await db.questionSet.findUnique({
+      where: { id: setId },
+      select: { ownerId: true },
+    });
+    if (set && !ownerIds.includes(set.ownerId)) {
+      ownerIds.push(set.ownerId);
+    }
+  }
+
+  if (ownerIds.length === 0) {
+    return NextResponse.json({ avatars: [] });
+  }
+
   const avatars = await db.avatar.findMany({
-    where: { ownerId: user.id },
+    where: { ownerId: { in: ownerIds } },
     include: { group: true },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ ownerId: "asc" }, { createdAt: "asc" }],
   });
-  return NextResponse.json({ avatars });
+
+  // Tag each avatar with whether it's a "demo" avatar (owned by the demo user)
+  // so the frontend can distinguish them from the user's own avatars.
+  const result = avatars.map((a) => ({
+    ...a,
+    isDemo: demoUserId ? a.ownerId === demoUserId : false,
+  }));
+
+  return NextResponse.json({ avatars: result });
 }
 
 export async function POST(req: NextRequest) {

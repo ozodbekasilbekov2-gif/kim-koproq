@@ -1,16 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
+import { ensureDemoSeed, getDemoUserId } from "@/lib/demo-seed";
 
+// GET /api/groups — returns the current user's groups PLUS the demo groups
+// (A guruh, B guruh) from the system "2af1-demo-user".
 export async function GET(req: NextRequest) {
+  // Ensure the demo data exists
+  try {
+    await ensureDemoSeed();
+  } catch (e) {
+    console.error("[groups GET] demo seed failed:", e);
+  }
+
   const user = await getCurrentUserDb(req);
-  if (!user) return NextResponse.json({ groups: [] });
+
+  const ownerIds: string[] = [];
+
+  // Always include the demo user's groups (A and B with 27 members)
+  const demoUserId = await getDemoUserId();
+  if (demoUserId) ownerIds.push(demoUserId);
+
+  // Include the current user's groups
+  if (user) ownerIds.push(user.id);
+
+  if (ownerIds.length === 0) {
+    return NextResponse.json({ groups: [] });
+  }
+
   const groups = await db.avatarGroup.findMany({
-    where: { ownerId: user.id },
+    where: { ownerId: { in: ownerIds } },
     include: { _count: { select: { avatars: true } } },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ ownerId: "asc" }, { createdAt: "asc" }],
   });
-  return NextResponse.json({ groups });
+
+  // Tag demo groups
+  const result = groups.map((g) => ({
+    ...g,
+    isDemo: demoUserId ? g.ownerId === demoUserId : false,
+  }));
+
+  return NextResponse.json({ groups: result });
 }
 
 export async function POST(req: NextRequest) {
