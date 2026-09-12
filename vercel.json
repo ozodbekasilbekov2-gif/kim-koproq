@@ -1,5 +1,5 @@
 {
-  "buildCommand": "bun run db:push && bun run build",
   "framework": "nextjs",
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+  "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build"
 }

@@ -1,13 +1,18 @@
 // Prisma schema for Kim Ko'proq — multi-user test/survey platform
 // Supports: email/password auth, Telegram Mini App auth, question sets,
 // avatars (people to vote on), avatar groups, strict/loose question mode, votes.
+//
+// DATABASE_URL must be a PostgreSQL connection string
+// For local dev: use Neon (free) or `docker run -e POSTGRES_PASSWORD=postgres -p 5432 postgres:16`
+// For Vercel prod: use Neon, Supabase, Vercel Postgres, etc.
 
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
