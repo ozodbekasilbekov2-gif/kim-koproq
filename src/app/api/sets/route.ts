@@ -42,6 +42,11 @@ export async function POST(req: NextRequest) {
     const description = (body.description || "").trim().slice(0, 500) || null;
     const emoji = (body.emoji || "❓").trim().slice(0, 8);
     const mode = body.mode === "loose" ? "loose" : "strict";
+    // groupIds: JSON-encoded array of AvatarGroup IDs
+    let groupIdsJson: string | null = null;
+    if (Array.isArray(body.groupIds)) {
+      groupIdsJson = JSON.stringify(body.groupIds.filter((id: any) => typeof id === "string"));
+    }
     const set = await db.questionSet.create({
       data: {
         title,
@@ -50,6 +55,7 @@ export async function POST(req: NextRequest) {
         mode,
         ownerId: user.id,
         isPublic: body.isPublic !== false,
+        groupIds: groupIdsJson,
       },
     });
     return NextResponse.json(set);

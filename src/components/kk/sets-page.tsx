@@ -26,6 +26,7 @@ import {
   Sparkles,
   Plus,
   Pencil,
+  Share2,
 } from "lucide-react";
 import type { KKUser } from "@/app/page";
 import type { ActionMode } from "./app-shell";
@@ -123,7 +124,7 @@ export function SetsPage({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <Loader2 className="w-6 h-6 animate-spin text-brand-lime" />
       </div>
     );
   }
@@ -140,23 +141,23 @@ export function SetsPage({
 
   if (filtered.length === 0) {
     return (
-      <div className="text-center py-20 space-y-4">
-        <div className="inline-flex w-16 h-16 rounded-2xl bg-brand-gradient items-center justify-center">
-          <Sparkles className="w-8 h-8 text-white" />
+      <div className="text-center py-20 space-y-4 fade-in">
+        <div className="inline-flex w-20 h-20 rounded-2xl bg-brand-gradient items-center justify-center glow-lime">
+          <Sparkles className="w-10 h-10 text-white" />
         </div>
         <div>
-          <h3 className="font-semibold text-lg">Setlar yo'q</h3>
+          <h3 className="brand text-2xl">SETLAR YO'Q</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Birinchi savol setingizni yarating yoki demo ma'lumot qo'shing
+            Birinchi savol setingizni yarating yoki 2AF1 demo ma'lumotlarni yuklang
           </p>
         </div>
         <div className="flex gap-2 justify-center">
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4 mr-1" /> Yaratish
-          </Button>
-          <Button variant="outline" onClick={() => loadDemoData(loadSets)}>
-            Demo yuklash
-          </Button>
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            <Plus className="w-4 h-4 mr-1 inline" /> Yaratish
+          </button>
+          <button onClick={() => loadDemoData(loadSets)} className="btn-ghost">
+            ⚡ 2AF1 demo yuklash
+          </button>
         </div>
       </div>
     );
@@ -165,15 +166,16 @@ export function SetsPage({
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {filtered.map((s) => {
+        {filtered.map((s, i) => {
           const isSelected = selectedIds.includes(s.id);
           const isOwner = s.ownerId === user.id;
           return (
-            <Card
+            <div
               key={s.id}
-              className={`relative p-4 cursor-pointer transition-all hover:shadow-md ${
-                isSelected ? "ring-2 ring-ring" : ""
-              } ${mode === "delete" ? "border-destructive/50" : ""}`}
+              className={`q-card p-4 cursor-pointer transition-all hover:border-brand-lime/40 fade-in ${
+                isSelected ? "ring-2 ring-brand-lime" : ""
+              } ${mode === "delete" ? "border-brand-red/50" : ""}`}
+              style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }}
               onClick={() => {
                 if (mode === "edit") {
                   if (!isOwner) {
@@ -199,33 +201,34 @@ export function SetsPage({
                     </p>
                   )}
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <Badge variant="secondary" className="text-[10px]">
-                      {s._count?.questions || 0} savol
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] ${
-                        s.mode === "strict" ? "border-destructive/40 text-destructive" : "border-chart-1/40 text-chart-1"
+                    <span className="pill bg-white/5 text-muted-foreground border border-border">
+                      📝 {s._count?.questions || 0} savol
+                    </span>
+                    <span
+                      className={`pill ${
+                        s.mode === "strict"
+                          ? "bg-brand-red/15 text-brand-red border border-brand-red/30"
+                          : "bg-brand-lime/15 text-brand-lime border border-brand-lime/30"
                       }`}
                     >
-                      {s.mode === "strict" ? <Lock className="w-3 h-3 mr-1" /> : <Unlock className="w-3 h-3 mr-1" />}
+                      {s.mode === "strict" ? <Lock className="w-3 h-3 mr-1 inline" /> : <Unlock className="w-3 h-3 mr-1 inline" />}
                       {s.mode === "strict" ? "Strict" : "Loose"}
-                    </Badge>
+                    </span>
                     {!s.isPublic && (
-                      <Badge variant="outline" className="text-[10px]">
-                        Shaxsiy
-                      </Badge>
+                      <span className="pill bg-white/5 text-muted-foreground border border-border">
+                        🔒 Shaxsiy
+                      </span>
                     )}
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
               </div>
               {isSelected && (
-                <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-destructive text-white text-xs flex items-center justify-center">
+                <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-brand-red text-white text-xs flex items-center justify-center">
                   ✓
                 </div>
               )}
-            </Card>
+            </div>
           );
         })}
       </div>
@@ -289,6 +292,38 @@ function SetDialog({
   );
   const [isPublic, setIsPublic] = useState(initialData?.isPublic ?? true);
   const [saving, setSaving] = useState(false);
+  // Avatar groups for selection
+  const [groups, setGroups] = useState<any[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(() => {
+    try {
+      const raw = (initialData as any)?.groupIds;
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw;
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  });
+
+  // Load groups on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiJson<{ groups: any[] }>("/api/groups");
+        setGroups(data.groups);
+      } catch (e) {
+        // ignore — groups will be empty
+      }
+    })();
+  }, []);
+
+  const toggleGroup = (gid: string) => {
+    if (selectedGroupIds.includes(gid)) {
+      setSelectedGroupIds(selectedGroupIds.filter((x) => x !== gid));
+    } else {
+      setSelectedGroupIds([...selectedGroupIds, gid]);
+    }
+  };
 
   const save = async () => {
     if (title.trim().length < 2) {
@@ -297,7 +332,7 @@ function SetDialog({
     }
     setSaving(true);
     try {
-      const body = { title, description, emoji, mode: setMode, isPublic };
+      const body = { title, description, emoji, mode: setMode, isPublic, groupIds: selectedGroupIds };
       if (mode === "create") {
         await apiJson("/api/sets", { method: "POST", body: JSON.stringify(body) });
       } else if (setId) {
@@ -358,6 +393,42 @@ function SetDialog({
             />
           </div>
 
+          {/* Avatar groups selection */}
+          <div className="space-y-2">
+            <Label>Guruhlarni tanlang (avtarlar shu guruhlardan javob sifatida ko'rinadi)</Label>
+            {groups.length === 0 ? (
+              <div className="text-xs text-muted-foreground p-3 rounded-lg border border-dashed">
+                Guruhlar topilmadi. "Avatari" bo'limida guruh yarating.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {groups.map((g) => {
+                  const selected = selectedGroupIds.includes(g.id);
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => toggleGroup(g.id)}
+                      className={`pill transition-all ${
+                        selected
+                          ? "bg-brand-lime text-black border border-brand-lime"
+                          : "bg-white/5 text-muted-foreground border border-border hover:border-brand-lime/40"
+                      }`}
+                    >
+                      {selected ? "✓ " : ""}
+                      {g.name} ({g._count?.avatars || 0})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="text-[10px] text-muted-foreground">
+              {selectedGroupIds.length === 0
+                ? "⚠️ Hech qaysi guruh tanlanmagan — barcha avatarlar ko'rinadi"
+                : `${selectedGroupIds.length} ta guruh tanlandi`}
+            </div>
+          </div>
+
           <div className="rounded-lg border p-3 space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -378,7 +449,7 @@ function SetDialog({
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
               <div className="font-medium text-sm">Ochiq (public)</div>
-              <div className="text-xs text-muted-foreground">Hamma ko'ra oladi</div>
+              <div className="text-xs text-muted-foreground">Hamma ko'ra oladi va ro'yxatdan o'tmasdan o'ta oladi</div>
             </div>
             <Switch checked={isPublic} onCheckedChange={setIsPublic} />
           </div>
@@ -413,7 +484,15 @@ function SetDetailView({
   const [loading, setLoading] = useState(true);
   const [showAddQ, setShowAddQ] = useState(false);
   const [editingQ, setEditingQ] = useState<any | null>(null);
-  const [view, setView] = useState<"questions" | "test" | "results">("questions");
+  const [view, setView] = useState<"questions" | "test" | "results" | "people">("questions");
+  const [showShare, setShowShare] = useState(false);
+
+  // Listen for "go to results" event from TestView's completion screen
+  useEffect(() => {
+    const handler = () => setView("results");
+    window.addEventListener("kk:goto-results", handler);
+    return () => window.removeEventListener("kk:goto-results", handler);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -449,73 +528,127 @@ function SetDetailView({
   const canEdit = isOwner || set.mode === "loose";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 fade-in">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onBack}>
+        <button onClick={onBack} className="btn-ghost text-sm">
           ← Orqaga
-        </Button>
-        <div className="flex-1 flex items-center gap-2">
-          <span className="text-2xl">{set.emoji}</span>
-          <div>
-            <h2 className="font-bold text-lg leading-tight">{set.title}</h2>
+        </button>
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          <span className="text-3xl shrink-0">{set.emoji}</span>
+          <div className="min-w-0">
+            <h2 className="font-bold text-lg leading-tight truncate">{set.title}</h2>
             {set.description && (
-              <p className="text-xs text-muted-foreground">{set.description}</p>
+              <p className="text-xs text-muted-foreground truncate">{set.description}</p>
             )}
           </div>
         </div>
-        <Badge variant={set.mode === "strict" ? "outline" : "secondary"} className="text-[10px]">
-          {set.mode === "strict" ? <Lock className="w-3 h-3 mr-1" /> : <Unlock className="w-3 h-3 mr-1" />}
+        {set.isPublic && (
+          <button
+            onClick={() => setShowShare(true)}
+            className="btn-ghost text-xs flex items-center gap-1"
+            title="Setni ulashish"
+          >
+            <Share2 className="w-4 h-4" /> Ulashish
+          </button>
+        )}
+        <span
+          className={`pill ${
+            set.mode === "strict"
+              ? "bg-brand-red/15 text-brand-red border border-brand-red/30"
+              : "bg-brand-lime/15 text-brand-lime border border-brand-lime/30"
+          }`}
+        >
+          {set.mode === "strict" ? <Lock className="w-3 h-3 mr-1 inline" /> : <Unlock className="w-3 h-3 mr-1 inline" />}
           {set.mode}
-        </Badge>
+        </span>
       </div>
 
-      <div className="flex items-center gap-2 border-b">
-        <Button variant={view === "questions" ? "default" : "ghost"} size="sm" onClick={() => setView("questions")}>
+      <div className="flex items-center gap-2 border-b border-border overflow-x-auto scrollbar-thin">
+        <button
+          onClick={() => setView("questions")}
+          className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition ${
+            view === "questions"
+              ? "text-brand-lime border-b-2 border-brand-lime"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
           Savollar
-        </Button>
-        <Button variant={view === "test" ? "default" : "ghost"} size="sm" onClick={() => setView("test")}>
+        </button>
+        <button
+          onClick={() => setView("test")}
+          className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition ${
+            view === "test"
+              ? "text-brand-lime border-b-2 border-brand-lime"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
           Test o'tash
-        </Button>
-        <Button variant={view === "results" ? "default" : "ghost"} size="sm" onClick={() => setView("results")}>
+        </button>
+        <button
+          onClick={() => setView("results")}
+          className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition ${
+            view === "results"
+              ? "text-brand-lime border-b-2 border-brand-lime"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
           Natijalar
-        </Button>
+        </button>
+        <button
+          onClick={() => setView("people")}
+          className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition ${
+            view === "people"
+              ? "text-brand-lime border-b-2 border-brand-lime"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          👤 Odamlar
+        </button>
       </div>
 
       {view === "questions" && (
         <div className="space-y-2">
           {questions.length === 0 && (
             <div className="text-center py-12 text-sm text-muted-foreground">
-              H savol yo'q. {canEdit ? "Birinchi savolni qo'shing" : "Egasi savol qo'shishini kuting"}
+              Hali savol yo'q. {canEdit ? "Birinchi savolni qo'shing" : "Egasi savol qo'shishini kuting"}
             </div>
           )}
           {questions.map((q, i) => (
-            <Card key={q.id} className="p-3 flex items-center gap-3">
-              <span className="text-2xl w-9 text-center">{q.emoji}</span>
+            <div key={q.id} className="q-card p-3 flex items-center gap-3 fade-in" style={{ animationDelay: `${Math.min(i * 20, 300)}ms` }}>
+              <span className="text-2xl w-9 text-center shrink-0">{q.emoji}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium leading-snug">
                   {i + 1}. {q.text}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
+                <span className={`pill cat-${String(q.category).split(" ")[0]} mt-1`}>
                   {q.category}
-                </div>
+                </span>
               </div>
               {canEdit && (
-                <Button variant="ghost" size="icon" onClick={() => setEditingQ(q)}>
+                <button
+                  onClick={() => setEditingQ(q)}
+                  className="text-muted-foreground hover:text-brand-lime p-2 rounded-lg hover:bg-white/5"
+                >
                   <Pencil className="w-4 h-4" />
-                </Button>
+                </button>
               )}
-            </Card>
+            </div>
           ))}
           {canEdit && (
-            <Button className="w-full" onClick={() => setShowAddQ(true)}>
-              <Plus className="w-4 h-4 mr-1" /> Savol qo'shish
-            </Button>
+            <button onClick={() => setShowAddQ(true)} className="btn-primary w-full">
+              <Plus className="w-4 h-4 mr-1 inline" /> Savol qo'shish
+            </button>
           )}
         </div>
       )}
 
       {view === "test" && <TestView setId={setId} questions={questions} />}
       {view === "results" && <ResultsView setId={setId} />}
+      {view === "people" && <PeopleView setId={setId} />}
+
+      {showShare && (
+        <ShareDialog setId={setId} title={set.title} onClose={() => setShowShare(false)} />
+      )}
 
       {showAddQ && (
         <QuestionDialog
@@ -663,10 +796,35 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
   useEffect(() => {
     (async () => {
       try {
+        // Load the set first to get groupIds
+        const setData = await apiJson<any>(`/api/sets/${setId}`);
+        let setGroupIds: string[] = [];
+        try {
+          const raw = (setData as any).groupIds;
+          if (raw) {
+            setGroupIds = Array.isArray(raw) ? raw : JSON.parse(raw);
+          }
+        } catch {}
+
+        // Load all avatars and groups
         const av = await apiJson<{ avatars: any[] }>("/api/avatars");
-        setAvatars(av.avatars);
         const gr = await apiJson<{ groups: any[] }>("/api/groups");
-        setGroups(gr.groups);
+
+        // Filter avatars: if the set has groupIds, only show avatars in those groups.
+        // Otherwise (no groups selected), show all avatars.
+        let filteredAvatars = av.avatars;
+        let filteredGroups = gr.groups;
+        if (setGroupIds.length > 0) {
+          filteredAvatars = av.avatars.filter((a: any) =>
+            setGroupIds.includes(a.groupId)
+          );
+          filteredGroups = gr.groups.filter((g: any) =>
+            setGroupIds.includes(g.id)
+          );
+        }
+        setAvatars(filteredAvatars);
+        setGroups(filteredGroups);
+
         const pr = await apiJson<{ answers: Record<string, Record<string, string>> }>(
           `/api/vote?setId=${setId}`
         );
@@ -697,12 +855,29 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
 
   if (done || idx >= questions.length) {
     return (
-      <div className="text-center py-12 space-y-3">
-        <div className="text-5xl">🎉</div>
-        <h3 className="font-bold text-xl">Tugatdingiz!</h3>
-        <p className="text-sm text-muted-foreground">
-          Javoblaringiz saqlandi. Endi natijalarni ko'ring.
+      <div className="text-center py-12 space-y-4 fade-in">
+        <div className="text-7xl animate-bounce">🎉</div>
+        <h3 className="brand text-4xl text-brand-lime">RAHMAT!</h3>
+        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+          Hammasiga javob berding. Endi natijalar — kim nima bo'ldi? 👀
         </p>
+        <div className="flex flex-wrap gap-2 justify-center pt-2">
+          <button
+            onClick={() => {
+              const event = new CustomEvent("kk:goto-results");
+              window.dispatchEvent(event);
+            }}
+            className="btn-primary"
+          >
+            📊 Natijalarni ko'rish
+          </button>
+          <button
+            onClick={() => { setDone(false); setIdx(0); }}
+            className="btn-ghost"
+          >
+            ✏️ Javoblarni o'zgartirish
+          </button>
+        </div>
       </div>
     );
   }
@@ -733,22 +908,22 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 fade-in">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{idx + 1} / {questions.length}</span>
-        <div className="flex-1 mx-3 h-1.5 bg-muted rounded-full overflow-hidden">
+        <span className="font-mono">{idx + 1} / {questions.length}</span>
+        <div className="flex-1 mx-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
           <div
-            className="h-full bg-primary transition-all"
+            className="h-full bg-brand-lime transition-all glow-lime"
             style={{ width: `${(idx / questions.length) * 100}%` }}
           />
         </div>
       </div>
 
-      <Card className="p-6 text-center space-y-2">
-        <div className="text-4xl">{q.emoji}</div>
-        <Badge variant="secondary" className="text-[10px]">{q.category}</Badge>
-        <h3 className="font-semibold text-lg leading-tight">{q.text}</h3>
-      </Card>
+      <div className="q-card p-6 text-center space-y-3">
+        <div className="text-5xl">{q.emoji}</div>
+        <span className={`pill cat-${String(q.category).split(" ")[0]}`}>{q.category}</span>
+        <h3 className="font-semibold text-lg leading-tight max-w-md mx-auto">{q.text}</h3>
+      </div>
 
       {groups.length === 0 ? (
         <div className="space-y-2">
@@ -774,10 +949,8 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
             return (
               <div key={g.id} className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">{g.name || g.color}</Badge>
-                  <span className="text-[10px] text-muted-foreground">
-                    majburiy
-                  </span>
+                  <span className={`gtag gtag-${g.color || "A"}`}>{g.name || g.color} GURUH</span>
+                  <span className="text-[10px] text-muted-foreground">majburiy</span>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {ga.map((a) => (
@@ -795,13 +968,17 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 pt-2">
-        <Button variant="ghost" size="sm" disabled={idx === 0} onClick={() => setIdx(idx - 1)}>
+      <div className="sticky bottom-20 flex items-center justify-between gap-2 pt-2 z-10">
+        <button
+          onClick={() => setIdx(idx - 1)}
+          disabled={idx === 0}
+          className="btn-ghost disabled:opacity-30"
+        >
           ← Oldingi
-        </Button>
-        <Button onClick={next}>
+        </button>
+        <button onClick={next} className="btn-primary">
           {idx === questions.length - 1 ? "Tugatish 🏁" : "Keyingi →"}
-        </Button>
+        </button>
       </div>
     </div>
   );
@@ -816,27 +993,32 @@ function AvatarTile({
   selected: boolean;
   onClick: () => void;
 }) {
+  // Original Kim Ko'proq vibe: member card with photo or MAFIA badge for those without photo
+  const hasPhoto = !!avatar.photoUrl;
   return (
     <button
       onClick={onClick}
-      className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border-2 transition-all ${
-        selected ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
-      }`}
+      className={`member-card w-full p-2 flex flex-col items-center gap-1 ${selected ? "selected" : ""}`}
     >
-      <div className="w-12 h-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
-        {avatar.photoUrl ? (
+      <div className="w-12 h-12 rounded-lg overflow-hidden bg-secondary flex items-center justify-center relative">
+        {hasPhoto ? (
           <img src={avatar.photoUrl} alt={avatar.name} className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full bg-secondary flex items-center justify-center text-xl">
+          <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-xl font-bold text-muted-foreground">
             {avatar.name?.[0] || "?"}
           </div>
+        )}
+        {!hasPhoto && (
+          <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[8px] text-center text-yellow-400 font-bold tracking-wider py-0.5">
+            🕵️ MAFIA
+          </span>
         )}
       </div>
       <div className="text-[10px] font-medium text-center truncate max-w-full">
         {avatar.shortName || avatar.name}
       </div>
       {selected && (
-        <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-white text-xs flex items-center justify-center">
+        <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-brand-lime text-black text-xs flex items-center justify-center font-bold">
           ✓
         </div>
       )}
@@ -845,6 +1027,315 @@ function AvatarTile({
 }
 
 function ResultsView({ setId }: { setId: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [cat, setCat] = useState<string>("all");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await apiJson<any>(`/api/results?setId=${setId}`);
+        setData(r);
+      } catch (e: any) {
+        toast.error(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [setId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-brand-lime" />
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const cats = [...new Set(data.questions.map((q: any) => q.category))] as string[];
+  const catClass = (c: string) => "cat-" + String(c).split(" ")[0];
+
+  // Helper: get avatar image URL (photo or icon-based placeholder)
+  const avatarImg = (a: any) => {
+    if (a?.photoUrl) return a.photoUrl;
+    return null;
+  };
+  const avatarInitial = (a: any) => (a?.shortName || a?.name || "?")[0];
+
+  function renderQuestions(c: string) {
+    const qs = data.questions.filter((q: any) => c === "all" || q.category === c);
+    return qs.map((q: any, i: number) => {
+      const qResults = data.results[q.id] || {};
+      return (
+        <div
+          key={q.id}
+          className="q-card p-4 fade-in"
+          style={{ animationDelay: `${Math.min(i * 40, 400)}ms` }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-2xl">{q.emoji}</span>
+            <span className={`pill ${catClass(q.category)}`}>{q.category}</span>
+          </div>
+          <h4 className="font-semibold text-base mb-3 leading-tight">{q.text}</h4>
+          <div className="space-y-3">
+            {Object.entries(qResults).map(([g, byTarget]: [string, any]) => {
+              const total = Object.values(byTarget).reduce(
+                (s: number, v: any) => s + v.length,
+                0
+              );
+              const max = Math.max(0, ...Object.values(byTarget).map((v: any) => v.length));
+              const sorted = Object.entries(byTarget).sort(
+                (a, b) => (b[1] as any[]).length - (a[1] as any[]).length
+              );
+              return (
+                <div key={g} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className={`gtag gtag-${g}`}>{g} GURUH</span>
+                    <span className="text-muted-foreground">{total} ovoz</span>
+                  </div>
+                  {sorted.map(([targetId, voters]: [string, any]) => {
+                    const votersArr = voters as any[];
+                    const av = data.avatars.find((a: any) => a.id === targetId);
+                    const pct = total ? Math.round((votersArr.length / total) * 100) : 0;
+                    const isTop = votersArr.length === max && votersArr.length > 0;
+                    return (
+                      <div
+                        key={targetId}
+                        className={`poll-opt ${isTop ? "top" : ""}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full overflow-hidden bg-secondary flex items-center justify-center shrink-0">
+                            {avatarImg(av) ? (
+                              <img src={avatarImg(av)} alt={av?.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-xs font-bold text-muted-foreground">
+                                {avatarInitial(av)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <span className="font-medium truncate">
+                                {av?.shortName || av?.name || "?"}
+                              </span>
+                              <span className={`font-bold ${isTop ? "text-brand-lime" : "text-muted-foreground"}`}>
+                                {pct}%
+                              </span>
+                            </div>
+                            <div className="mt-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${isTop ? "bg-brand-lime" : "bg-brand-yellow/60"}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground shrink-0">
+                            {votersArr.length} ovoz
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {total === 0 && (
+                    <div className="text-xs text-muted-foreground/50 py-2 text-center">
+                      Hali ovoz yo'q
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    });
+  }
+
+  function renderPeople() {
+    // Build wins + mentions per avatar
+    const wins: Record<string, any[]> = {};
+    const mentions: Record<string, number> = {};
+    for (const q of data.questions) {
+      for (const g of Object.keys(data.results[q.id] || {})) {
+        const byTarget = data.results[q.id][g] || {};
+        let best: string | null = null;
+        let bn = 0;
+        for (const [t, vs] of Object.entries(byTarget)) {
+          mentions[t] = (mentions[t] || 0) + (vs as any[]).length;
+          if ((vs as any[]).length > bn) {
+            bn = (vs as any[]).length;
+            best = t;
+          }
+        }
+        if (best && bn > 0) {
+          (wins[best] ||= []).push({ q, n: bn });
+        }
+      }
+    }
+    const sorted = [...data.avatars].sort(
+      (a, b) =>
+        (wins[b.id]?.length || 0) - (wins[a.id]?.length || 0) ||
+        (mentions[b.id] || 0) - (mentions[a.id] || 0)
+    );
+    return sorted.map((av: any, i: number) => (
+      <div
+        key={av.id}
+        className="q-card p-4 fade-in"
+        style={{ animationDelay: `${Math.min(i * 30, 400)}ms` }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-14 h-14 rounded-xl overflow-hidden bg-secondary flex items-center justify-center shrink-0">
+            {avatarImg(av) ? (
+              <img src={avatarImg(av)} alt={av.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xl font-bold text-muted-foreground">
+                {avatarInitial(av)}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold flex items-center gap-2">
+              <span className="truncate">{av.name}</span>
+              {av.group && (
+                <span className={`gtag gtag-${av.group.color}`}>
+                  {av.group.color}
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              🏆 {(wins[av.id] || []).length} g'alaba · 👥 {mentions[av.id] || 0} ovoz
+            </div>
+          </div>
+        </div>
+        {(wins[av.id] || []).length > 0 && (
+          <ul className="mt-3 space-y-1 text-sm">
+            {wins[av.id].map((w, j) => (
+              <li key={j} className="flex gap-2 items-start">
+                <span>{w.q.emoji}</span>
+                <span className="text-muted-foreground flex-1">{w.q.text}</span>
+                <span className="text-brand-lime font-bold">{w.n}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    ));
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="text-center">
+        <h2 className="brand text-4xl leading-none">
+          NATIJALAR <span className="text-brand-yellow">🏆</span>
+        </h2>
+        <p className="text-xs text-muted-foreground mt-2">
+          👥 {data.voters}/{data.totalMembers} ovoz berdi · ✅ {data.completed} tugatdi
+        </p>
+      </div>
+
+      {/* Category chips */}
+      <div className="flex flex-wrap gap-2 justify-center">
+        <button
+          onClick={() => setCat("all")}
+          className={`pill ${cat === "all" ? "bg-brand-lime text-black" : "bg-white/5 text-muted-foreground border border-border"}`}
+        >
+          Barchasi
+        </button>
+        {cats.map((c) => (
+          <button
+            key={c}
+            onClick={() => setCat(c)}
+            className={`pill ${cat === c ? catClass(c) + " ring-2 ring-ring" : "bg-white/5 text-muted-foreground border border-border"}`}
+          >
+            {c}
+          </button>
+        ))}
+        <button
+          onClick={() => setCat("__people")}
+          className={`pill ${cat === "__people" ? "bg-brand-coral/20 text-brand-coral border border-brand-coral/40 ring-2 ring-ring" : "bg-white/5 text-muted-foreground border border-border"}`}
+        >
+          👤 Odamlar
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {cat === "__people" ? renderPeople() : renderQuestions(cat)}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Share dialog ----------
+function ShareDialog({
+  setId,
+  title,
+  onClose,
+}: {
+  setId: string;
+  title: string;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const shareUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/?share=${setId}`
+    : `https://kim-koproq.vercel.app/?share=${setId}`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      toast.success("Havola nusxalandi!");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Nusxalash amalga oshmadi");
+    }
+  };
+
+  const shareToTelegram = () => {
+    const text = `Kim ko'proq...? — ${title}\nSo'rovnomada qatnashing:`;
+    const url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`;
+    window.open(url, "_blank");
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Setni ulashish 🔗</DialogTitle>
+          <DialogDescription>
+            Bu havola orqali har kim (ro'yxatdan o'tmasdan) so'rovnomada qatnasha oladi
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="rounded-lg border border-border bg-card p-3">
+            <div className="text-xs text-muted-foreground mb-1">Havola:</div>
+            <div className="text-sm font-mono break-all text-brand-lime">{shareUrl}</div>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={copy} className="btn-primary flex-1">
+              {copied ? "✓ Nusxalandi" : "📋 Nusxalash"}
+            </Button>
+            <Button onClick={shareToTelegram} className="btn-ghost flex-1">
+              📲 Telegram
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground text-center">
+            ⚠️ Set "Ochiq" (public) bo'lishi kerak — boshqalar kirib o'ta oladi
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Yopish</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------- People view (separate from Results) ----------
+// Shows each avatar with: how many times they were chosen, in which questions,
+// and how many "wins" (top votes) they have. Matches the original 2AF1 style.
+function PeopleView({ setId }: { setId: string }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -864,57 +1355,107 @@ function ResultsView({ setId }: { setId: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin" />
+        <Loader2 className="w-6 h-6 animate-spin text-brand-lime" />
       </div>
     );
   }
 
   if (!data) return null;
 
+  // Build wins + mentions per avatar
+  const wins: Record<string, Array<{ q: any; n: number; group: string }>> = {};
+  const mentions: Record<string, number> = {};
+  for (const q of data.questions) {
+    for (const g of Object.keys(data.results[q.id] || {})) {
+      const byTarget = data.results[q.id][g] || {};
+      let best: string | null = null;
+      let bn = 0;
+      for (const [t, vs] of Object.entries(byTarget)) {
+        const voters = vs as any[];
+        mentions[t] = (mentions[t] || 0) + voters.length;
+        if (voters.length > bn) {
+          bn = voters.length;
+          best = t;
+        }
+      }
+      if (best && bn > 0) {
+        (wins[best] ||= []).push({ q, n: bn, group: g });
+      }
+    }
+  }
+
+  // Sort: most wins first, then most mentions
+  const sorted = [...data.avatars].sort(
+    (a, b) =>
+      (wins[b.id]?.length || 0) - (wins[a.id]?.length || 0) ||
+      (mentions[b.id] || 0) - (mentions[a.id] || 0)
+  );
+
   return (
-    <div className="space-y-3">
-      <div className="text-center text-sm text-muted-foreground">
-        👥 {data.voters}/{data.totalMembers} ovoz berdi · ✅ {data.completed} tugatdi
+    <div className="space-y-4">
+      <div className="text-center">
+        <h2 className="brand text-4xl leading-none">
+          ODAMLAR <span className="text-brand-coral">👤</span>
+        </h2>
+        <p className="text-xs text-muted-foreground mt-2">
+          Har bir avatar necha marta tanlangan va qaysi savolda g'alaba qozongan
+        </p>
       </div>
-      {data.questions.map((q: any) => {
-        const qResults = data.results[q.id] || {};
-        return (
-          <Card key={q.id} className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">{q.emoji}</span>
-              <h4 className="font-semibold text-sm flex-1">{q.text}</h4>
-            </div>
-            <div className="space-y-2">
-              {Object.entries(qResults).map(([g, byTarget]: [string, any]) => {
-                const total = Object.values(byTarget).reduce(
-                  (s: number, v: any) => s + v.length,
-                  0
-                );
-                return (
-                  <div key={g} className="space-y-1">
-                    <div className="text-[10px] text-muted-foreground uppercase">{g} · {total} ovoz</div>
-                    {Object.entries(byTarget)
-                      .sort((a, b) => (b[1] as any[]).length - (a[1] as any[]).length)
-                      .map(([targetId, voters]) => {
-                        const av = data.avatars.find((a: any) => a.id === targetId);
-                        const pct = total ? Math.round(((voters as any[]).length / total) * 100) : 0;
-                        return (
-                          <div key={targetId} className="flex items-center gap-2 text-xs">
-                            <div className="w-20 truncate">{av?.shortName || av?.name || "?"}</div>
-                            <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
-                            </div>
-                            <div className="w-10 text-right">{(voters as any[]).length}</div>
-                          </div>
-                        );
-                      })}
+
+      <div className="space-y-3">
+        {sorted.map((av: any, i: number) => {
+          const avatarWins = wins[av.id] || [];
+          const mentionCount = mentions[av.id] || 0;
+          const hasPhoto = !!av.photoUrl;
+          return (
+            <div
+              key={av.id}
+              className="q-card p-4 fade-in"
+              style={{ animationDelay: `${Math.min(i * 30, 400)}ms` }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-16 rounded-xl overflow-hidden bg-secondary flex items-center justify-center shrink-0">
+                  {hasPhoto ? (
+                    <img src={av.photoUrl} alt={av.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-xl font-bold text-muted-foreground">
+                      {av.name?.[0] || "?"}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold flex items-center gap-2 flex-wrap">
+                    <span className="truncate">{av.name}</span>
+                    {av.group && (
+                      <span className={`gtag gtag-${av.group.color}`}>
+                        {av.group.color}
+                      </span>
+                    )}
                   </div>
-                );
-              })}
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    🏆 {avatarWins.length} g'alaba · 👥 {mentionCount} ovoz
+                  </div>
+                </div>
+              </div>
+              {avatarWins.length > 0 ? (
+                <ul className="mt-3 space-y-1.5 text-sm">
+                  {avatarWins.map((w, j) => (
+                    <li key={j} className="flex gap-2 items-start">
+                      <span className="text-lg shrink-0">{w.q.emoji}</span>
+                      <span className="text-muted-foreground flex-1">{w.q.text}</span>
+                      <span className="text-brand-lime font-bold shrink-0">{w.n}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="mt-3 text-xs text-muted-foreground/50 italic">
+                  Hali hech qaysi savolda birinchi emas 🙃
+                </div>
+              )}
             </div>
-          </Card>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

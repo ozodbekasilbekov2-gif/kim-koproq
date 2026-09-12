@@ -84,6 +84,9 @@ model QuestionSet {
   ownerId     String
   owner       User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   isPublic    Boolean    @default(true)
+  // JSON array of AvatarGroup IDs that this set uses as answer options.
+  // Empty/null means "use all avatars from the set owner + demo avatars".
+  groupIds    String?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 

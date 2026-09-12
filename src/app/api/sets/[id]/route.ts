@@ -41,6 +41,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (typeof body.emoji === "string") data.emoji = body.emoji.trim().slice(0, 8);
     if (body.mode === "strict" || body.mode === "loose") data.mode = body.mode;
     if (typeof body.isPublic === "boolean") data.isPublic = body.isPublic;
+    if (Array.isArray(body.groupIds)) {
+      data.groupIds = JSON.stringify(body.groupIds.filter((id: any) => typeof id === "string"));
+    } else if (body.groupIds === null) {
+      data.groupIds = null;
+    }
     const updated = await db.questionSet.update({ where: { id }, data });
     return NextResponse.json(updated);
   } catch (e: any) {

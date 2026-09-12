@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Zap } from "lucide-react";
 import { LoginScreen } from "@/components/kk/login-screen";
 import { AppShell } from "@/components/kk/app-shell";
+import { GuestMode } from "@/components/kk/guest-mode";
 
 export type KKUser = {
   id: string;
@@ -29,6 +30,20 @@ export default function Home() {
   const [user, setUser] = useState<KKUser | null>(null);
   // tgStatus: "checking" (still waiting for SDK + login attempt) | "done" (finished, user or null)
   const [tgStatus, setTgStatus] = useState<"checking" | "done">("checking");
+  // Guest mode: when ?share=setId is in URL, allow browsing without registration
+  const [guestSetId, setGuestSetId] = useState<string | null>(null);
+
+  // Check for ?share=setId in URL on mount — if present, enter guest mode
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const share = params.get("share");
+      if (share) {
+        setGuestSetId(share);
+        setTgStatus("done"); // skip auth wait
+      }
+    }
+  }, []);
 
   // Telegram Mini App login — runs on mount, waits for SDK to load
   const tryTelegramLogin = useCallback(async () => {
@@ -97,6 +112,19 @@ export default function Home() {
       : null;
 
   const currentUser = user || sessionUser;
+
+  // Guest mode: ?share=setId — show the set directly without registration
+  if (guestSetId) {
+    const exitGuest = () => {
+      setGuestSetId(null);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("share");
+        window.history.replaceState({}, "", url.toString());
+      }
+    };
+    return <GuestMode setId={guestSetId} onExit={exitGuest} />;
+  }
 
   if (loading) {
     return (
