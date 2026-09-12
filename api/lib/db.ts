@@ -68,21 +68,53 @@ CREATE TABLE IF NOT EXISTS tg_users (
 );
 `
 
+// Telegram-bot auxiliary tables — created independently so an existing
+// production database gets them without touching the questions/votes schema.
+const TG_TABLES: Record<string, string> = {
+  tg_users: `CREATE TABLE IF NOT EXISTS tg_users (
+    chat_id BIGINT PRIMARY KEY,
+    member_id TEXT NOT NULL,
+    tg_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`,
+  // Conversation state for multi-step flows (create/edit question via chat)
+  tg_sessions: `CREATE TABLE IF NOT EXISTS tg_sessions (
+    chat_id BIGINT PRIMARY KEY,
+    state TEXT NOT NULL,
+    payload JSONB,
+    updated_at TIMESTAMPTZ DEFAULT now()
+  )`,
+  // Registry of native polls sent by the bot: maps telegram poll_id ->
+  // (question, group, member id per option index) so poll_answer updates
+  // can be written back into the site's votes table.
+  tg_polls: `CREATE TABLE IF NOT EXISTS tg_polls (
+    poll_id TEXT PRIMARY KEY,
+    question_id INTEGER NOT NULL,
+    target_group TEXT NOT NULL,
+    option_members JSONB NOT NULL,
+    chat_id BIGINT,
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`,
+  // Webhook dedupe: Telegram retries deliveries on timeout; this makes
+  // processing idempotent (fan-outs never duplicate).
+  tg_updates: `CREATE TABLE IF NOT EXISTS tg_updates (
+    update_id BIGINT PRIMARY KEY,
+    processed_at TIMESTAMPTZ DEFAULT now()
+  )`,
+}
+
 async function init() {
   const q = await createQuery()
   // Fast path: when the schema already exists, skip DDL + seeding so every
   // serverless cold start costs a single round-trip instead of ~40.
-  const [flags] = await q(`SELECT to_regclass('public.questions') IS NOT NULL AS tbl_ok,
-                                  to_regclass('public.tg_users') IS NOT NULL AS tg_ok`)
-  if (!flags.tg_ok) {
-    await q(`CREATE TABLE IF NOT EXISTS tg_users (
-      chat_id BIGINT PRIMARY KEY,
-      member_id TEXT NOT NULL,
-      tg_name TEXT,
-      created_at TIMESTAMPTZ DEFAULT now()
-    )`)
-  }
-  if (!flags.tbl_ok) {
+  const [flags] = await q(
+    `SELECT to_regclass('public.questions') IS NOT NULL AS q_ok,
+            to_regclass('public.tg_users') IS NOT NULL AS tg_ok,
+            to_regclass('public.tg_sessions') IS NOT NULL AS sess_ok,
+            to_regclass('public.tg_polls') IS NOT NULL AS polls_ok,
+            to_regclass('public.tg_updates') IS NOT NULL AS upd_ok`
+  )
+  if (!flags.q_ok) {
     for (const stmt of SCHEMA.split(';').map((s) => s.trim()).filter(Boolean)) {
       await q(stmt)
     }
@@ -93,6 +125,10 @@ async function init() {
       return `($${base},$${base + 1},$${base + 2},$${base + 3})`
     })
     await q(`INSERT INTO questions (text, emoji, category, created_by) VALUES ${rows.join(',')}`, values)
+  }
+  for (const [name, ddl] of Object.entries(TG_TABLES)) {
+    const flag = { tg_users: flags.tg_ok, tg_sessions: flags.sess_ok, tg_polls: flags.polls_ok, tg_updates: flags.upd_ok }[name]
+    if (!flag) await q(ddl)
   }
   queryImpl = q
 }

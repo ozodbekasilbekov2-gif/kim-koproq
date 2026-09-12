@@ -5,7 +5,8 @@ import { handleUpdate, webhookSecret } from './lib/telegram-bot.js'
 import type { TgUpdate } from './lib/telegram-bot.js'
 
 export const config = { runtime: 'nodejs' }
-// Fan-out of 29 question cards is paced (group chats ~1 msg/sec), give it headroom
+// Native-poll fan-out (29 questions x 2 group chunks) is paced; the bot also
+// checkpoints progress, so 60s gives headroom without losing work
 export const maxDuration = 60
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
