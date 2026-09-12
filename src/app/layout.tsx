@@ -54,8 +54,14 @@ export default function RootLayout({
   return (
     <html lang="uz" suppressHydrationWarning>
       <head>
-        {/* Telegram Mini App SDK */}
-        <script src="https://telegram.org/js/telegram-web-app.js" async />
+        {/*
+          Telegram Mini App SDK — loaded synchronously (NOT async) so that
+          window.Telegram.WebApp is available by the time React mounts.
+          The script itself is tiny (~5KB) and caches aggressively.
+          This is required for reliable Mini App auto-login on first paint.
+        */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="https://telegram.org/js/telegram-web-app.js" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${bebasNeue.variable} antialiased bg-background text-foreground`}

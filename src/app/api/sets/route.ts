@@ -1,85 +1,119 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
+import { MEMBERS, SEED_QUESTIONS } from "@/lib/original-data";
 
-// Auto-seed: ensures the original 2AF1 demo set exists for every visitor.
-// Idempotent — only creates if missing. Uses a system "demo" user as owner.
+const DEMO_SET_TITLE = "Kim ko'proq...? — 2AF1 so'rovi";
+const DEMO_USER_TELEGRAM_ID = "2af1-demo-user";
+
+// Number of questions that MUST exist in the demo set for it to be considered "complete".
+// If fewer, the set is deleted and recreated from scratch.
+const EXPECTED_QUESTIONS = SEED_QUESTIONS.length; // 29
+
+// Auto-seed: ensures the original 2AF1 demo set exists with ALL questions.
+// Deletes any incomplete or stale demo sets first. Idempotent.
 async function ensureDemoSeed() {
-  const existing = await db.questionSet.findFirst({
-    where: { title: { startsWith: "Kim ko'proq...? — 2AF1" } },
+  // 1) Find ALL existing demo sets — these are sets whose title contains
+  //    "Kim ko'proq" or "Birinchi set" or "2AF1" (old naming variants).
+  //    We delete ALL of them and recreate a single canonical one.
+  const staleDemoSets = await db.questionSet.findMany({
+    where: {
+      OR: [
+        { title: { contains: "Kim ko'proq" } },
+        { title: { contains: "2AF1" } },
+        { title: { contains: "Birinchi set" } },
+      ],
+    },
     include: { _count: { select: { questions: true } } },
   });
-  if (existing && existing._count.questions >= 32) return;
-  if (existing) {
-    await db.questionSet.delete({ where: { id: existing.id } });
+
+  // Find a "good" demo set (has the canonical title AND the right number of questions)
+  const goodSet = staleDemoSets.find(
+    (s) => s.title === DEMO_SET_TITLE && s._count.questions >= EXPECTED_QUESTIONS
+  );
+  if (goodSet) return; // Already seeded correctly — nothing to do.
+
+  // Delete all stale/incomplete demo sets
+  for (const s of staleDemoSets) {
+    await db.questionSet.delete({ where: { id: s.id } }).catch(() => {});
   }
-  // Trigger the seed endpoint's GET logic by importing it lazily
-  const res = await fetch(
-    `http://localhost:${process.env.PORT || 3000}/api/seed`
-  ).catch(() => null);
-  if (!res || !res.ok) {
-    // Fallback: create inline
-    const { MEMBERS, SEED_QUESTIONS } = await import("@/lib/original-data");
-    let demoUser = await db.user.findUnique({
-      where: { telegramId: "2af1-demo-user" },
-    });
-    if (!demoUser) {
-      demoUser = await db.user.create({
-        data: {
-          telegramId: "2af1-demo-user",
-          telegramName: "2AF1 Demo",
-          firstName: "2AF1",
-          lastName: "Guruh",
-        },
-      });
-    }
-    const groupA = await db.avatarGroup.create({
-      data: { name: "A guruh", color: "A", ownerId: demoUser.id },
-    });
-    const groupB = await db.avatarGroup.create({
-      data: { name: "B guruh", color: "B", ownerId: demoUser.id },
-    });
-    for (const m of MEMBERS) {
-      const groupId = m.group === "A" ? groupA.id : groupB.id;
-      const photoUrl = m.photo ? `/static/members/${m.id}.jpg` : null;
-      const iconName = m.photo ? null : "user-secret";
-      await db.avatar.create({
-        data: {
-          name: m.name,
-          shortName: m.short,
-          photoUrl,
-          iconName,
-          groupId,
-          ownerId: demoUser.id,
-        },
-      });
-    }
-    const set = await db.questionSet.create({
+  console.log(
+    `[auto-seed] Deleted ${staleDemoSets.length} stale demo set(s), recreating...`
+  );
+
+  // 2) Find or create the demo user (system-owned, no auth credentials)
+  let demoUser = await db.user.findUnique({
+    where: { telegramId: DEMO_USER_TELEGRAM_ID },
+  });
+  if (!demoUser) {
+    demoUser = await db.user.create({
       data: {
-        title: "Kim ko'proq...? — 2AF1 so'rovi",
-        description:
-          "2AF1 guruhi uchun qiziqarli savollar. Roast, Rostini ayt, Kelajak, Xaos.",
-        emoji: "⚡",
-        mode: "loose",
-        ownerId: demoUser.id,
-        isPublic: true,
+        telegramId: DEMO_USER_TELEGRAM_ID,
+        telegramName: "2AF1 Demo",
+        firstName: "2AF1",
+        lastName: "Guruh",
       },
     });
-    for (const q of SEED_QUESTIONS) {
-      await db.question.create({
-        data: {
-          text: q.text,
-          emoji: q.emoji,
-          category: q.category,
-          setId: set.id,
-          createdBy: demoUser.id,
-        },
-      });
-    }
-    console.log(
-      `[auto-seed] Created demo set with ${SEED_QUESTIONS.length} questions and ${MEMBERS.length} members`
-    );
   }
+
+  // 3) Clean up any old avatars/groups owned by the demo user before recreating
+  await db.avatar.deleteMany({ where: { ownerId: demoUser.id } }).catch(() => {});
+  await db.avatarGroup.deleteMany({ where: { ownerId: demoUser.id } }).catch(() => {});
+
+  // 4) Create groups A and B
+  const groupA = await db.avatarGroup.create({
+    data: { name: "A guruh", color: "A", ownerId: demoUser.id },
+  });
+  const groupB = await db.avatarGroup.create({
+    data: { name: "B guruh", color: "B", ownerId: demoUser.id },
+  });
+
+  // 5) Create all 27 original members as avatars
+  for (const m of MEMBERS) {
+    const groupId = m.group === "A" ? groupA.id : groupB.id;
+    const photoUrl = m.photo ? `/static/members/${m.id}.jpg` : null;
+    const iconName = m.photo ? null : "user-secret"; // mafia badge for no-photo members
+    await db.avatar.create({
+      data: {
+        name: m.name,
+        shortName: m.short,
+        photoUrl,
+        iconName,
+        groupId,
+        ownerId: demoUser.id,
+      },
+    });
+  }
+
+  // 6) Create the demo set
+  const set = await db.questionSet.create({
+    data: {
+      title: DEMO_SET_TITLE,
+      description:
+        "2AF1 guruhi uchun qiziqarli savollar. Roast, Rostini ayt, Kelajak, Xaos.",
+      emoji: "⚡",
+      mode: "loose",
+      ownerId: demoUser.id,
+      isPublic: true,
+    },
+  });
+
+  // 7) Create all questions
+  for (const q of SEED_QUESTIONS) {
+    await db.question.create({
+      data: {
+        text: q.text,
+        emoji: q.emoji,
+        category: q.category,
+        setId: set.id,
+        createdBy: demoUser.id,
+      },
+    });
+  }
+
+  console.log(
+    `[auto-seed] ✅ Created demo set "${DEMO_SET_TITLE}" with ${SEED_QUESTIONS.length} questions and ${MEMBERS.length} members`
+  );
 }
 
 // List all public sets + sets owned by user

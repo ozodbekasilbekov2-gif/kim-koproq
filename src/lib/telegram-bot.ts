@@ -242,16 +242,42 @@ const CATEGORY_EMOJI: Record<string, string> = {
 
 const validQuestionText = (t: string): boolean => t.length >= 5 && t.length <= 200;
 
-// We need a "default" set to operate on — for backward compatibility with the
-// original bot, we use the first public set the bound user can access (or create one).
+// We need a "default" set for the bot to operate on.
+// Preference order:
+//   1. The canonical 2AF1 demo set ("Kim ko'proq...? — 2AF1 so'rovi") — public
+//   2. The user's own first set (if bound)
+//   3. Any public set
 async function getDefaultSet(userId?: string): Promise<{ id: string; ownerId: string } | null> {
+  // 1) Prefer the canonical 2AF1 demo set by exact title match
+  const demo = await db.questionSet.findFirst({
+    where: { title: "Kim ko'proq...? — 2AF1 so'rovi", isPublic: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (demo) return { id: demo.id, ownerId: demo.ownerId };
+
+  // 2) Fallback: any set whose title contains "Kim ko'proq" or "2AF1"
+  const any2af1 = await db.questionSet.findFirst({
+    where: {
+      isPublic: true,
+      OR: [
+        { title: { contains: "Kim ko'proq" } },
+        { title: { contains: "2AF1" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  if (any2af1) return { id: any2af1.id, ownerId: any2af1.ownerId };
+
+  // 3) User's own first set
   if (userId) {
     const own = await db.questionSet.findFirst({
       where: { ownerId: userId },
       orderBy: { createdAt: "asc" },
     });
-    if (own) return { id: own.id, ownerId: own.id };
+    if (own) return { id: own.id, ownerId: own.ownerId };
   }
+
+  // 4) Any public set
   const pub = await db.questionSet.findFirst({
     where: { isPublic: true },
     orderBy: { createdAt: "asc" },

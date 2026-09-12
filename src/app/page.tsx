@@ -3,9 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import {
-  isTelegramMiniApp,
   loginViaTelegram,
   getStoredTgToken,
+  waitForTelegramSdk,
 } from "@/lib/telegram-client";
 import { apiJson } from "@/lib/api-client";
 import { toast } from "sonner";
@@ -27,63 +27,58 @@ export type KKUser = {
 export default function Home() {
   const { data: session, status } = useSession();
   const [user, setUser] = useState<KKUser | null>(null);
-  const [tgStatus, setTgStatus] = useState<"checking" | "no-tg" | "logged-in">("checking");
+  // tgStatus: "checking" (still waiting for SDK + login attempt) | "done" (finished, user or null)
+  const [tgStatus, setTgStatus] = useState<"checking" | "done">("checking");
 
-  const isTg = typeof window !== "undefined" && isTelegramMiniApp();
-
-  // Telegram Mini App login — only when running inside Telegram
+  // Telegram Mini App login — runs on mount, waits for SDK to load
   const tryTelegramLogin = useCallback(async () => {
-    if (!isTelegramMiniApp()) {
-      setTgStatus("no-tg");
+    // Wait for the Telegram SDK script to load (up to 5 seconds).
+    // If it doesn't load, we're not in a Telegram Mini App — fall through to NextAuth.
+    const sdkReady = await waitForTelegramSdk(5000);
+    if (!sdkReady) {
+      // Not in Telegram Mini App — NextAuth will handle auth
+      setTgStatus("done");
       return;
     }
+
+    // SDK is ready — we're in a Telegram Mini App context.
+    // Try to use a stored JWT first (avoids re-login on every visit).
     const stored = getStoredTgToken();
     let me: KKUser | null = null;
     if (stored) {
       try {
         me = await apiJson<KKUser>("/api/profile");
       } catch {
+        // Token is stale — re-login via initData
         const data = await loginViaTelegram();
         if (data?.user) me = data.user;
       }
     } else {
+      // No stored token — fresh login via Telegram initData
       const data = await loginViaTelegram();
       if (data?.user) me = data.user;
-      else toast.error("Telegram orqali kirib bo'lmadi. Botdan qayta urining.");
+      else {
+        // loginViaTelegram returns null only if SDK not ready or initData invalid.
+        // Since SDK is ready, this means initData validation failed on the server.
+        toast.error("Telegram orqali kirib bo'lmadi. Botdan qayta urining.");
+      }
     }
     if (me) setUser(me);
-    setTgStatus("logged-in");
+    setTgStatus("done");
   }, []);
 
   useEffect(() => {
-    // Telegram Mini App login side-effect — runs once on mount.
     void tryTelegramLogin();
   }, [tryTelegramLogin]);
 
-  // Apply Telegram WebApp theme on mount
-  useEffect(() => {
-    const w = window as any;
-    if (w.Telegram?.WebApp) {
-      try {
-        w.Telegram.WebApp.ready();
-        w.Telegram.WebApp.expand();
-        w.Telegram.WebApp.disableVerticalSwipes?.();
-        w.Telegram.WebApp.setHeaderColor?.("#0a0a0a");
-        w.Telegram.WebApp.setBackgroundColor?.("#0a0a0a");
-      } catch {}
-    }
-  }, []);
-
   // Loading state:
-  // - In Telegram Mini App: wait for tg login to complete
-  // - On web: wait for NextAuth status
-  const loading = isTg
-    ? tgStatus === "checking"
-    : status === "loading" || (status === "unauthenticated" && tgStatus === "checking");
+  // - Wait for Telegram SDK check to finish (up to 5s)
+  // - AND wait for NextAuth session check
+  const loading = tgStatus === "checking" || status === "loading";
 
-  // Derive user from session directly (no setState-in-effect)
+  // Derive user from NextAuth session (when not in Telegram Mini App)
   const sessionUser: KKUser | null =
-    !isTg && status === "authenticated" && session?.user
+    status === "authenticated" && session?.user
       ? (() => {
           const u = session.user as any;
           return {
