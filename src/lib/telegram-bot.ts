@@ -1119,18 +1119,40 @@ async function onCallback(cb: TgCallback): Promise<void> {
     ));
   }
 
+  // ----- results — open results page on the site -----
+  if (cmd === "results") {
+    await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    const set = await getDefaultSet(binding?.userId);
+    const miniAppUrl = process.env.NEXT_PUBLIC_MINI_APP_URL || "https://kim-koproq.vercel.app";
+    if (!set) {
+      return void (await sendMsg(chatId, "⚠️ Set topilmadi.", menuKb));
+    }
+    await sendMsg(chatId, "📊 Natijalarni saytda ko'rish uchun:", menuKb);
+    await sendMiniAppButton(chatId, `Set ID: ${set.id}`, `${miniAppUrl}?share=${set.id}`, "📊 Natijalarni ochish");
+    return;
+  }
+
+  // ----- open_site — open Mini App -----
+  if (cmd === "open_site") {
+    await answerCb(cb.id);
+    const miniAppUrl = process.env.NEXT_PUBLIC_MINI_APP_URL || "https://kim-koproq.vercel.app";
+    await sendMsg(chatId, "🌐 Sayt ochilmoqda...", menuKb);
+    await sendMiniAppButton(chatId, "To'liq sayt", miniAppUrl, "🌐 Saytni ochish");
+    return;
+  }
+
   await answerCb(cb.id);
 }
 
 // ---------- Entry ----------
 // Main menu reply keyboard — persistent buttons at the bottom of chat.
-// These buttons REPLACE the text input field. User taps them to navigate.
 // Layout: 2 columns x 2 rows
-//   📋 Setlar    |  👥 Avatari
-//   🔍 Izlash    |  ℹ️ Yordam
+//   📋 Setlar          |  👥 Guruh tanlash
+//   🔍 Izlash          |  ℹ️ Yordam
 const mainMenuReplyKb = (): ReplyKeyboard => ({
   keyboard: [
-    [{ text: "📋 Setlar" }, { text: "👥 Avatari" }],
+    [{ text: "📋 Setlar" }, { text: "👥 Guruh tanlash" }],
     [{ text: "🔍 Izlash" }, { text: "ℹ️ Yordam" }],
   ],
   resize_keyboard: true,
@@ -1166,27 +1188,53 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
       return void (await sendMsgWithReplyKb(chatId, "❌ Bekor qilindi.", mainMenuReplyKb()));
     }
 
-    // Reply keyboard button handlers (button labels arrive as text messages)
+    // ===== Reply keyboard button handlers =====
+    // These trigger the SAME inline keyboard flows that existed in the original bot.
+
+    // 📋 Setlar — question CRUD sub-menu (create / edit / delete / results / open site)
     if (rawText === "📋 Setlar") {
-      await sendMsgWithReplyKb(
+      await clearSession(chatId);
+      const binding = await getBinding(chatId);
+      const set = await getDefaultSet(binding?.userId);
+      const count = set ? (await listQuestions(set.id)).length : 0;
+      return void (await sendMsg(
         chatId,
-        "📋 <b>Savol setlari</b>\n\nQuyidagi tugma orqali to'liq saytni oching — setlarni yaratish, tahrirlash, o'chirish va test o'tash:",
-        mainMenuReplyKb()
-      );
-      await sendMiniAppButton(chatId, "🌐 Mini App ni ochish", miniAppUrl, "🌐 Saytni ochish");
-      return;
+        `📋 <b>Savollarni boshqarish</b>\n\n` +
+        (set
+          ? `Aktiv setda ${count} ta savol bor.\nQuyidagi amallardan birini tanlang:`
+          : "Hozircha set topilmadi. Avval saytda set yarating."),
+        kb(
+          [btn("➕ Yangi savol qo'shish", "newq")],
+          [btn("📝 Savolni o'zgartirish", "editq0")],
+          [btn("🗑 Savolni o'chirish", "delq0")],
+          [btn("📊 Natijalarni ko'rish", "results")],
+          [btn("🌐 Saytda ochish", "open_site")]
+        )
+      ));
     }
-    if (rawText === "👥 Avatari") {
-      await sendMsgWithReplyKb(
+
+    // 👥 Guruh tanlash — group chooser + binding + native polls
+    if (rawText === "👥 Guruh tanlash") {
+      await clearSession(chatId);
+      const binding = await getBinding(chatId);
+      if (!binding) {
+        const avatars = await getAvatarsForBot();
+        return void (await sendMsg(
+          chatId,
+          "👤 Ovozlar saytga to'g'ri yozilishi uchun avval o'zingizni tanlang:",
+          whoKb(avatars, "grp")
+        ));
+      }
+      const avatars = await getAvatarsForBot(binding.userId);
+      return void (await sendMsg(
         chatId,
-        "👥 <b>Aavatarlar</b>\n\nOdamlar va guruhlarni boshqarish — yangi avatar qo'shish, rasm yoki professional ikonka tanlash, guruh yaratish:",
-        mainMenuReplyKb()
-      );
-      await sendMiniAppButton(chatId, "🌐 Mini App ni ochish", miniAppUrl, "🌐 Saytni ochish");
-      return;
+        "👥 Qaysi guruh uchun native so'rovnomalar yuborilsin?",
+        groupChooserKb(avatars)
+      ));
     }
+
+    // 🔍 Izlash — enter search mode, user pastes URL
     if (rawText === "🔍 Izlash") {
-      // Enter search mode — user can paste a set URL or ID
       await setSession(chatId, "search_url", {});
       return void (await sendMsgWithReplyKb(
         chatId,
@@ -1196,17 +1244,21 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
         backReplyKb()
       ));
     }
+
+    // ℹ️ Yordam — help text
     if (rawText === "ℹ️ Yordam") {
       return void (await sendMsgWithReplyKb(
         chatId,
         "ℹ️ <b>Yordam</b>\n\n" +
-        "<b>📋 Setlar</b> — savol to'plamlarini boshqarish (yaratish, tahrirlash, o'chirish, test o'tash, natijalar)\n" +
-        "<b>👥 Avatari</b> — odamlar va guruhlarni boshqarish\n" +
-        "<b>🔍 Izlash</b> — set URL orqali so'rovnomada qatnashish (ro'yxatdan o'tmasdan)\n\n" +
-        "Hammasi Mini App ichida ishlaydi — to'liq funksional sayt.",
+        "<b>📋 Setlar</b> — savol qo'shish, o'zgartirish, o'chirish, natijalar\n" +
+        "<b>👥 Guruh tanlash</b> — native Telegram so'rovnomalar (poll) yuborish\n" +
+        "<b>🔍 Izlash</b> — set URL orqali so'rovnomada qatnashish\n\n" +
+        "Polllarda ovoz berganingiz sayt natijalariga avtomatik yoziladi.",
         mainMenuReplyKb()
       ));
     }
+
+    // 🔙 Orqaga — return to main menu
     if (rawText === "🔙 Orqaga") {
       await clearSession(chatId);
       return onMenu(chatId, name);
@@ -1214,7 +1266,7 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
 
     if (!isPrivate) return;
 
-    // Check conversation state for multi-step flows
+    // ===== Conversation state handlers (multi-step flows) =====
     const sess = await getSession(chatId);
 
     // Search URL state — user pasted a URL or set ID
@@ -1222,7 +1274,6 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
       const query = rawText.trim();
       let setId: string | null = null;
 
-      // Try to extract setId from URL
       try {
         if (query.startsWith("http")) {
           const url = new URL(query);
@@ -1233,7 +1284,6 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
         }
       } catch {}
 
-      // Try as raw set ID (cuid format: 20-30 alphanumeric chars)
       if (!setId && /^[a-z0-9]{20,30}$/i.test(query)) {
         setId = query;
       }
@@ -1253,10 +1303,15 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
       return;
     }
 
+    // New question text — user typed a question
     if (sess?.state === "new_text" && sess.payload?.setId) {
       return onNewQuestionText(chatId, msg.text || "", String(sess.payload.setId));
     }
-    if (sess?.state === "edit_text") return onEditQuestionText(chatId, msg.text || "", sess.payload);
+
+    // Edit question text — user typed the new text
+    if (sess?.state === "edit_text") {
+      return onEditQuestionText(chatId, msg.text || "", sess.payload);
+    }
 
     // Unknown text — show main menu
     if (msg.text) {
