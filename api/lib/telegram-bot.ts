@@ -100,9 +100,10 @@ async function setBinding(chatId: number, memberId: string, tgName?: string): Pr
 
 async function listQuestions(): Promise<Array<{ id: number; text: string; emoji: string; category: string }>> {
   const q = await db()
-  return q(
+  const rows = await q(
     `SELECT id, text, emoji, category FROM questions WHERE deleted_at IS NULL ORDER BY id`
   )
+  return rows.map((r) => ({ id: Number(r.id), text: String(r.text), emoji: String(r.emoji), category: String(r.category) }))
 }
 
 async function questionExists(qid: number): Promise<boolean> {
@@ -243,7 +244,7 @@ async function fanOut(chatId: number, chat: TgChat): Promise<void> {
 async function onCallback(cb: TgCallback): Promise<void> {
   const data = cb.data || ''
   const chatId = cb.message?.chat?.id
-  if (!chatId) return answerCb(cb.id)
+  if (!chatId) { await answerCb(cb.id); return }
   const from = cb.from
   const name = from.first_name || from.username
 
@@ -287,7 +288,7 @@ async function onCallback(cb: TgCallback): Promise<void> {
     if (cmd === 'who') {
       const idx = Number(rest[0])
       const m = memberByIdx(idx)
-      if (!m) return answerCb(cb.id, 'A\'zo topilmadi', true)
+      if (!m) { await answerCb(cb.id, 'A\'zo topilmadi', true); return }
       await setBinding(chatId, m.id, name)
       await answerCb(cb.id, `✅ Siz: ${m.name} (${m.group}-guruh)`)
       if (back) return onCallback({ ...cb, data: back })
@@ -330,7 +331,7 @@ async function onCallback(cb: TgCallback): Promise<void> {
     const group = rest[1] as 'A' | 'B'
     const idx = Number(rest[2])
     const target = memberByIdx(idx)
-    if (!target) return answerCb(cb.id, 'A\'zo topilmadi', true)
+    if (!target) { await answerCb(cb.id, 'A\'zo topilmadi', true); return }
     const voter = await getBinding(chatId)
     if (!voter) {
       await answerCb(cb.id, 'Avval o\'zingizni tanlang 👤', true)
@@ -342,7 +343,7 @@ async function onCallback(cb: TgCallback): Promise<void> {
       const msg = e?.message === 'self vote' ? 'O\'zingizga ovoz bera olmaysiz 🙂'
         : e?.message === 'invalid target' ? 'Noto\'g\'ri guruh a\'zosi'
         : e?.message === 'question not found' ? 'Savol topilmadi' : 'Xatolik, qayta urinib ko\'ring'
-      return answerCb(cb.id, msg, true)
+      await answerCb(cb.id, msg, true); return
     }
     const my = await getMyVotes(voter, qid)
     await answerCb(cb.id, `✅ Ovoz: ${target.short} (${group})`)
@@ -366,7 +367,7 @@ async function onCallback(cb: TgCallback): Promise<void> {
     return
   }
 
-  return answerCb(cb.id)
+  await answerCb(cb.id)
 }
 
 async function questionText(qid: number): Promise<{ text: string; emoji: string; category: string }> {
