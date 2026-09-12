@@ -1064,6 +1064,21 @@ function ResultsView({ setId }: { setId: string }) {
   };
   const avatarInitial = (a: any) => (a?.shortName || a?.name || "?")[0];
 
+  // Helper: get voter display info (name + photo) from voterInfo map.
+  // Falls back to "?" if voter is unknown.
+  const voterImg = (voterId: string): string | null => {
+    const info = data.voterInfo?.[voterId];
+    return info?.photo || null;
+  };
+  const voterName = (voterId: string): string => {
+    const info = data.voterInfo?.[voterId];
+    return info?.name || "?";
+  };
+  const voterInitial = (voterId: string): string => {
+    const name = voterName(voterId);
+    return name[0] || "?";
+  };
+
   function renderQuestions(c: string) {
     const qs = data.questions.filter((q: any) => c === "all" || q.category === c);
     return qs.map((q: any, i: number) => {
@@ -1106,6 +1121,7 @@ function ResultsView({ setId }: { setId: string }) {
                         className={`poll-opt ${isTop ? "top" : ""}`}
                       >
                         <div className="flex items-center gap-2">
+                          {/* Target avatar (who was voted for) */}
                           <div className="w-8 h-8 rounded-full overflow-hidden bg-secondary flex items-center justify-center shrink-0">
                             {avatarImg(av) ? (
                               <img src={avatarImg(av)} alt={av?.name} className="w-full h-full object-cover" />
@@ -1131,8 +1147,36 @@ function ResultsView({ setId }: { setId: string }) {
                               />
                             </div>
                           </div>
+                          {/* Voter stack — small avatars of who voted (max 3, +N for the rest) */}
+                          {votersArr.length > 0 && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <div className="flex">
+                                {votersArr.slice(0, 3).map((voterId: string, i: number) => (
+                                  <div
+                                    key={voterId + i}
+                                    className="w-5 h-5 rounded-full overflow-hidden border border-background bg-secondary flex items-center justify-center"
+                                    style={{ marginLeft: i === 0 ? 0 : -6 }}
+                                    title={voterName(voterId)}
+                                  >
+                                    {voterImg(voterId) ? (
+                                      <img src={voterImg(voterId)!} alt={voterName(voterId)} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-[8px] font-bold text-muted-foreground">
+                                        {voterInitial(voterId)}
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                                {votersArr.length > 3 && (
+                                  <span className="text-[10px] text-muted-foreground ml-1">
+                                    +{votersArr.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                           <div className="text-xs text-muted-foreground shrink-0">
-                            {votersArr.length} ovoz
+                            {votersArr.length}
                           </div>
                         </div>
                       </div>
