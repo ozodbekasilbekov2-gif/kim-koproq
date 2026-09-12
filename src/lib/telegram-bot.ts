@@ -112,10 +112,21 @@ const trimTo = (s: string, n: number): string => (s.length <= n ? s : s.slice(0,
 
 // Find or create a Telegram user (linked to a User record).
 // We use chat_id (string) as the telegramId on the User model.
+// The binding (chat_id → which avatar/member the user is) is stored in
+// the TelegramBinding table.
 async function getBinding(chatId: number): Promise<{ userId: string; avatarId?: string } | undefined> {
+  // First check TelegramBinding (stores chat_id → user_id + avatar_id)
+  const binding = await db.telegramBinding.findUnique({
+    where: { chatId: String(chatId) },
+    select: { userId: true, avatarId: true },
+  });
+  if (binding) {
+    return { userId: binding.userId, avatarId: binding.avatarId || undefined };
+  }
+  // Fallback: check if a User exists with this telegramId (created via Mini App login)
   const u = await db.user.findUnique({
     where: { telegramId: String(chatId) },
-    select: { id: true, firstName: true, lastName: true },
+    select: { id: true },
   });
   if (!u) return undefined;
   return { userId: u.id };
@@ -362,8 +373,11 @@ async function deleteQuestion(qid: string, actorId: string): Promise<boolean> {
 
 // ---------- Avatars / members (via new schema) ----------
 // Avatars now live in DB instead of hardcoded MEMBERS array.
-// For the bot we load all avatars across groups for the bound user (or default set owner).
+// For the bot we load all avatars across groups for the demo set owner.
 
+// For the bot we load all avatars across groups for the demo set owner.
+// The 2AF1 demo avatars (27 members) belong to the system '2af1-demo-user',
+// NOT the bound Telegram user. So we always load from the demo set owner.
 async function getAvatarsForBot(userId?: string): Promise<
   Array<{
     id: string;
@@ -373,9 +387,38 @@ async function getAvatarsForBot(userId?: string): Promise<
     photoUrl: string | null;
   }>
 > {
-  const where = userId ? { ownerId: userId } : {};
+  // Find the demo set and its owner — that's who owns the 27 member avatars
+  const demoSet = await db.questionSet.findFirst({
+    where: {
+      OR: [
+        { title: "Kim ko'proq...? — 2AF1 so'rovi" },
+        { title: { contains: "Kim ko'proq" } },
+        { title: { contains: "2AF1" } },
+        { title: { contains: "Birinchi set" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+    select: { ownerId: true },
+  });
+
+  let ownerId: string | undefined = demoSet?.ownerId;
+
+  // Fallback: if no demo set found, use the bound user's avatars (if any)
+  if (!ownerId && userId) ownerId = userId;
+
+  // Fallback: if still no owner, use the system demo user
+  if (!ownerId) {
+    const demoUser = await db.user.findUnique({
+      where: { telegramId: "2af1-demo-user" },
+      select: { id: true },
+    });
+    ownerId = demoUser?.id;
+  }
+
+  if (!ownerId) return [];
+
   const avatars = await db.avatar.findMany({
-    where,
+    where: { ownerId },
     include: { group: true },
     orderBy: { createdAt: "asc" },
   });
