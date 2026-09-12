@@ -1,7 +1,7 @@
 /// <reference types="node" />
 // Telegram webhook endpoint: https://<deployment>/api/telegram
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { handleUpdate, webhookSecret } from './lib/telegram-bot.js'
+import { handleUpdate, webhookSecret, normalizeBotToken } from './lib/telegram-bot.js'
 import type { TgUpdate } from './lib/telegram-bot.js'
 
 export const config = { runtime: 'nodejs' }
@@ -10,7 +10,7 @@ export const config = { runtime: 'nodejs' }
 export const maxDuration = 60
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  const token = process.env.TELEGRAM_BOT_TOKEN
+  const token = normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN)
   if (!token) {
     console.error('[tg-webhook] TELEGRAM_BOT_TOKEN is not set')
     res.statusCode = 500
@@ -18,12 +18,19 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return
   }
   if (req.method !== 'POST') {
+    // Masked token info so the owner can verify what is actually stored in Vercel
+    const mask = token.length >= 10 ? `${token.slice(0, 4)}…${token.slice(-4)} (len ${token.length})` : '(too short)'
     res.statusCode = 200
-    res.end('kim-koproq telegram webhook is live')
+    res.end(`kim-koproq telegram webhook is live · token=${mask}`)
     return
   }
   const secret = req.headers['x-telegram-bot-api-secret-token']
-  if (!secret || secret !== webhookSecret(token)) {
+  const expected = webhookSecret(token)
+  if (!secret || secret !== expected) {
+    const got = Array.isArray(secret) ? secret[0] : secret
+    console.error(
+      `[tg-webhook] secret mismatch: got=${got ? got.slice(0, 8) + '…' : 'none'} expected=${expected.slice(0, 8)}… (token mask ${token.slice(0, 4)}…${token.slice(-4)}, len ${token.length})`
+    )
     res.statusCode = 401
     res.end('bad secret')
     return

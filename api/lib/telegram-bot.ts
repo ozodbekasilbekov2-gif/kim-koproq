@@ -34,9 +34,24 @@ const CATEGORY_EMOJI: Record<string, string> = { Roast: '🔥', 'Rostini ayt': '
 export const webhookSecret = (token: string): string =>
   createHash('sha256').update(token + '|kim-koproq').digest('hex').slice(0, 48)
 
+// Vercel env values are stored verbatim — users often paste extra whitespace,
+// quotes or the whole "TELEGRAM_BOT_TOKEN=..." line. Normalize before use,
+// otherwise both the webhook secret check and Bot API calls break silently.
+export function normalizeBotToken(raw: string | undefined): string {
+  let t = (raw ?? '').trim()
+  if (t.length > 1 && ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'")))) {
+    t = t.slice(1, -1).trim()
+  }
+  const eq = t.indexOf('=')
+  if (eq > 0 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(t.slice(0, eq))) {
+    t = t.slice(eq + 1).trim()
+  }
+  return t
+}
+
 // ---------- Telegram API ----------
 const TG_BASE = process.env.TG_API_BASE || 'https://api.telegram.org'
-const token = () => process.env.TELEGRAM_BOT_TOKEN || ''
+const token = () => normalizeBotToken(process.env.TELEGRAM_BOT_TOKEN)
 
 type InlineButton = { text: string; callback_data?: string; url?: string }
 type InlineKeyboard = { inline_keyboard: InlineButton[][] }
