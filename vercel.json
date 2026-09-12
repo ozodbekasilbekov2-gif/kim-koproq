@@ -1,5 +1,5 @@
 {
-  "rewrites": [
-    { "source": "/((?!static/).*)", "destination": "/api/index" }
-  ]
+  "buildCommand": "bun run db:push && bun run build",
+  "framework": "nextjs",
+  "regions": ["iad1"]
 }

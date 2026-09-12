@@ -1,0 +1,176 @@
+// Prisma schema for Kim Ko'proq — multi-user test/survey platform
+// Supports: email/password auth, Telegram Mini App auth, question sets,
+// avatars (people to vote on), avatar groups, strict/loose question mode, votes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------- Auth ----------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  passwordHash  String?
+  firstName     String?
+  lastName      String?
+  avatarUrl     String?
+  // Telegram link (one user may have one TG account, and vice versa)
+  telegramId    String?   @unique
+  telegramName  String?
+  telegramPhoto String?
+  role          String    @default("user") // "user" | "admin"
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  questionSets  QuestionSet[]
+  avatars       Avatar[]
+  avatarGroups  AvatarGroup[]
+  votes         Vote[]
+  sessions      Session[]
+  accounts      Account[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String // "credentials" | "telegram"
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------- Question Sets ----------------
+
+model QuestionSet {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  emoji       String     @default("❓")
+  // strict: only owner can edit questions
+  // loose: any user can edit questions
+  mode        String     @default("strict") // "strict" | "loose"
+  ownerId     String
+  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  isPublic    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  questions   Question[]
+  votes       Vote[]
+}
+
+model Question {
+  id         String       @id @default(cuid())
+  text       String
+  emoji      String       @default("❓")
+  category   String       @default("Xaos")
+  setId      String
+  set        QuestionSet  @relation(fields: [setId], references: [id], onDelete: Cascade)
+  createdBy  String
+  updatedBy  String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  deletedAt  DateTime?
+  deletedBy  String?
+
+  votes      Vote[]
+  history    QuestionHistory[]
+
+  @@index([setId])
+}
+
+model QuestionHistory {
+  id         String    @id @default(cuid())
+  questionId String
+  question   Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  action     String // "add" | "edit" | "delete"
+  actor      String
+  oldText    String?
+  newText    String?
+  at         DateTime  @default(now())
+
+  @@index([questionId])
+}
+
+// ---------------- Avatars (people to vote on) ----------------
+
+model Avatar {
+  id         String   @id @default(cuid())
+  name       String
+  shortName  String?
+  // Either a user-uploaded photo URL, or a professional Lucide icon name
+  photoUrl   String?
+  iconName   String?
+  // Optional group membership (each avatar can be in one group)
+  groupId    String?
+  group      AvatarGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  ownerId    String
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  votes      Vote[]
+
+  @@index([groupId])
+  @@index([ownerId])
+}
+
+model AvatarGroup {
+  id        String   @id @default(cuid())
+  name      String
+  color     String  @default("A") // can be "A" or "B" or arbitrary tag
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  avatars   Avatar[]
+
+  @@index([ownerId])
+}
+
+// ---------------- Votes ----------------
+
+model Vote {
+  id         String       @id @default(cuid())
+  voterId    String
+  voter      User         @relation(fields: [voterId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  setId      String
+  set        QuestionSet  @relation(fields: [setId], references: [id], onDelete: Cascade)
+  targetId   String // avatar id
+  target     Avatar       @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  groupId    String // group color/tag
+  createdAt  DateTime     @default(now())
+
+  @@unique([voterId, questionId, groupId])
+  @@index([setId, questionId])
+  @@index([voterId])
+}

@@ -3,9 +3,14 @@ dist/
 .wrangler/
 .dev.vars
 .env
+.env.local
 *.log
 tmp/
 .pm2/
 *.tar.gz
 .data/
 .vercel/
+.next/
+db/
+uploads/
+*.db
