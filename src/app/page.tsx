@@ -9,6 +9,7 @@ import {
 } from "@/lib/telegram-client";
 import { apiJson } from "@/lib/api-client";
 import { toast } from "sonner";
+import { Zap } from "lucide-react";
 import { LoginScreen } from "@/components/kk/login-screen";
 import { AppShell } from "@/components/kk/app-shell";
 
@@ -99,10 +100,14 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-20 h-20 rounded-2xl bg-brand-gradient flex items-center justify-center text-3xl animate-pulse">
-            ⚡
+      <div className="min-h-screen flex items-center justify-center bg-background relative">
+        <div className="bg-glow" />
+        <div className="flex flex-col items-center gap-4 relative z-10">
+          <div className="w-24 h-24 rounded-2xl bg-brand-gradient flex items-center justify-center shadow-2xl glow-lime animate-pulse">
+            <Zap className="w-12 h-12 text-white" strokeWidth={3} fill="white" />
+          </div>
+          <div className="brand text-2xl tracking-wide">
+            KIM KO'PROQ<span className="text-brand-yellow">...?</span>
           </div>
           <div className="text-sm text-muted-foreground">Yuklanmoqda...</div>
         </div>

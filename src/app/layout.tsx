@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Bebas_Neue } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
@@ -15,17 +15,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const bebasNeue = Bebas_Neue({
+  variable: "--font-bebas-neue",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Kim ko'proq...? — Test platformasi",
-  description: "O'z testlaringizni yarating, odamlar qo'shing va ovoz berib natijalarni ko'ring. Telegram Mini App va web-da sinxron.",
-  keywords: ["kim koproq", "test", "so'rov", "telegram", "mini app"],
+  title: "Kim ko'proq...? — 2AF1 so'rovi",
+  description: "2AF1 guruhi uchun qiziqarli so'rov. Kim ko'proq...? — Telegram Mini App bilan sinxron.",
+  keywords: ["kim koproq", "2AF1", "test", "so'rov", "telegram", "mini app"],
   icons: {
     icon: "/favicon.png",
     apple: "/favicon.png",
   },
   openGraph: {
     title: "Kim ko'proq...?",
-    description: "Test platformasi — Telegram Mini App bilan sinxron",
+    description: "2AF1 guruh so'rovi — Telegram Mini App bilan sinxron",
     type: "website",
   },
 };
@@ -51,11 +58,15 @@ export default function RootLayout({
         <script src="https://telegram.org/js/telegram-web-app.js" async />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} ${bebasNeue.variable} antialiased bg-background text-foreground`}
       >
-        <Providers>{children}</Providers>
+        {/* Background glow — original Kim Ko'proq vibe */}
+        <div className="bg-glow" />
+        <div className="relative z-10">
+          <Providers>{children}</Providers>
+        </div>
         <Toaster />
-        <SonnerToaster richColors position="top-center" />
+        <SonnerToaster richColors position="top-center" theme="dark" />
       </body>
     </html>
   );

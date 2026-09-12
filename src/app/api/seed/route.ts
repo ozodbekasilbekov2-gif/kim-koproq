@@ -1,29 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
+import { MEMBERS, SEED_QUESTIONS } from "@/lib/original-data";
 
-const SEED_QUESTIONS: { emoji: string; category: string; text: string }[] = [
-  { emoji: "⏰", category: "Roast", text: "Kim \"5 minutda yetib kelaman\" deb, 1 soatdan keyin keladi?" },
-  { emoji: "👻", category: "Roast", text: "Kim guruh chatida hammasini o'qiydi, lekin umrida javob yozmaydi?" },
-  { emoji: "🤓", category: "Roast", text: "Kim domlaning har gapiga bosh qimirlatadi, lekin hech narsani tushunmaydi?" },
-  { emoji: "🎭", category: "Roast", text: "Kim imtihondan oldin \"o'qimadim\" deydi, keyin eng yuqori ball oladi?" },
-  { emoji: "🎤", category: "Roast", text: "Kim bir og'iz gap uchun 7 daqiqalik voice yuboradi?" },
-  { emoji: "🧠", category: "Rostini ayt", text: "Kim aslida guruhning yashirin lideri?" },
-  { emoji: "🛡️", category: "Rostini ayt", text: "Kimga hayotingni ishonib topshirarding?" },
-  { emoji: "🤐", category: "Rostini ayt", text: "Kimga hech qachon sir aytmas eding?" },
-  { emoji: "💍", category: "Kelajak", text: "Kim 30 yoshda ham \"hali erta\" deb uylanmaydi?" },
-  { emoji: "🚗", category: "Kelajak", text: "Kim birinchi bo'lib mashina oladi?" },
-  { emoji: "💰", category: "Xaos", text: "Kim butun guruhni 1 million dollarga sotadi?" },
-  { emoji: "🧟", category: "Xaos", text: "Kim zombi apokalipsisida birinchi 5 minutda o'ladi?" },
-];
-
-// POST /api/seed — creates a demo set + avatars for the current user
+// POST /api/seed — creates the original 2AF1 set with all 27 members and 32 questions
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUserDb(req);
     if (!user) return NextResponse.json({ error: "Auth required" }, { status: 401 });
 
-    // create two groups
+    // 1) Create two groups: A and B (matching original)
     const groupA = await db.avatarGroup.create({
       data: { name: "A guruh", color: "A", ownerId: user.id },
     });
@@ -31,43 +17,39 @@ export async function POST(req: NextRequest) {
       data: { name: "B guruh", color: "B", ownerId: user.id },
     });
 
-    // create sample avatars (placeholders using professional icons)
-    const avatarsData = [
-      { name: "Ali", group: groupA, icon: "user" },
-      { name: "Vali", group: groupA, icon: "user-tie" },
-      { name: "Hasan", group: groupA, icon: "user-cog" },
-      { name: "Husan", group: groupA, icon: "user-graduate" },
-      { name: "Maryam", group: groupB, icon: "user-nurse" },
-      { name: "Zaynab", group: groupB, icon: "user-check" },
-      { name: "Saida", group: groupB, icon: "user-astronaut" },
-    ];
-    const avatars: Awaited<ReturnType<typeof db.avatar.create>>[] = [];
-    for (const a of avatarsData) {
-      avatars.push(
-        await db.avatar.create({
-          data: {
-            name: a.name,
-            iconName: a.icon,
-            groupId: a.group.id,
-            ownerId: user.id,
-          },
-        })
-      );
+    // 2) Create all 27 original members as avatars
+    // Photos live in /public/static/members/<id>.jpg for those with photo=true
+    const avatars: { id: string }[] = [];
+    for (const m of MEMBERS) {
+      const groupId = m.group === "A" ? groupA.id : groupB.id;
+      const photoUrl = m.photo ? `/static/members/${m.id}.jpg` : null;
+      const iconName = m.photo ? null : "user-secret"; // for mafia (no photo) members
+      const created = await db.avatar.create({
+        data: {
+          name: m.name,
+          shortName: m.short,
+          photoUrl,
+          iconName,
+          groupId,
+          ownerId: user.id,
+        },
+      });
+      avatars.push({ id: created.id });
     }
 
-    // create a demo set
+    // 3) Create the demo set with original "Kim ko'proq...?" branding
     const set = await db.questionSet.create({
       data: {
-        title: "Birinchi set — Kim ko'proq?",
-        description: "Telegram bot orqali sinab ko'ring",
+        title: "Kim ko'proq...? — 2AF1 so'rovi",
+        description: "2AF1 guruhi uchun qiziqarli savollar. Roast, Rostini ayt, Kelajak, Xaos.",
         emoji: "⚡",
-        mode: "loose",
+        mode: "loose", // loose — har kim o'zgartira oladi
         ownerId: user.id,
         isPublic: true,
       },
     });
 
-    // seed questions
+    // 4) Create all 32 original questions
     for (const q of SEED_QUESTIONS) {
       await db.question.create({
         data: {
@@ -82,9 +64,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      set,
+      set: { id: set.id, title: set.title },
       groups: [groupA, groupB],
-      avatars,
+      avatarsCount: avatars.length,
       questionsCount: SEED_QUESTIONS.length,
     });
   } catch (e: any) {
