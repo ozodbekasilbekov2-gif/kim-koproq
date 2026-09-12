@@ -21,7 +21,7 @@ import { ensureDemoSeed } from "@/lib/demo-seed";
 // ---------- Types ----------
 type TgUser = { id: number; first_name?: string; username?: string };
 type TgChat = { id: number; type?: string };
-type TgMessage = { message_id: number; chat: TgChat; text?: string; from?: TgUser };
+type TgMessage = { message_id: number; chat: TgChat; text?: string; from?: TgUser; photo?: any[] };
 type TgCallback = { id: string; from: TgUser; data?: string; message?: TgMessage };
 type TgPollAnswer = { poll_id: string; user: TgUser; option_ids: number[] };
 export type TgUpdate = {
@@ -588,15 +588,19 @@ function menuText(name?: string): string {
   return (
     `👋 Salom${name ? ", <b>" + esc(name) + "</b>" : ""}!\n\n` +
     `Bu — <b>Kim ko'proq...?</b> boti.\n\n` +
-    `✏️ <b>Savollarni tahrirlash</b> — savol qo'shish, o'zgartirish yoki o'chirish\n` +
-    `👥 <b>Guruhni tanlash</b> — tanlangan guruh a'zolari bilan native Telegram so'rovnomalar (poll) yuboriladi\n\n` +
-    `💡 Polllarda ovoz berganingiz sayt natijalariga ham avtomatik yoziladi.`
+    `📋 <b>Setlar</b> — savol setlarini boshqarish (yaratish, tahrirlash, o'chirish, ulashish)\n` +
+    `👥 <b>Avatari</b> — odamlar va guruhlarni boshqarish\n` +
+    `👤 <b>Profil</b> — ma'lumotlaringizni ko'rish va tahrirlash\n` +
+    `🔍 <b>Izlash</b> — set URL orqali so'rovnomada qatnashish\n\n` +
+    `💡 Polllarda ovoz berganingiz sayt natijalariga avtomatik yoziladi.`
   );
 }
 
 const menuKb = kb(
-  [btn("✏️ Savollarni tahrirlash", "editm")],
-  [btn("👥 Guruhni tanlash", "grp")]
+  [btn("📋 Setlar", "setlist:0")],
+  [btn("👥 Avatari", "avatarlist:0")],
+  [btn("👤 Profil", "profile")],
+  [btn("🔍 Izlash", "search")]
 );
 
 const cancelKb = kb([btn("❌ Bekor qilish", "cancel")]);
@@ -795,6 +799,8 @@ async function onEditQuestionText(
   payload: any
 ): Promise<void> {
   const qid = String(payload?.qid);
+  const setId = String(payload?.setId || "");
+  const page = String(payload?.page || "0");
   const text = (raw || "").trim();
   if (!validQuestionText(text)) {
     await sendMsg(
@@ -811,6 +817,16 @@ async function onEditQuestionText(
   if (!okUpd) {
     await sendMsg(chatId, "⚠️ Savol topilmadi (o'chirilgan bo'lishi mumkin).", menuKb);
     return;
+  }
+  // Return to the set's question list if setId is available
+  if (setId) {
+    await sendMsg(chatId, `✅ Savol yangilandi:\n«${esc(text)}»`);
+    return void (await onCallback({
+      id: `edit_done_${Date.now()}`,
+      from: { id: chatId },
+      message: { message_id: 0, chat: { id: chatId, type: "private" } },
+      data: `setquestions:${setId}:${page}`,
+    }));
   }
   await sendMsg(chatId, `✅ Savol yangilandi:\n«${esc(text)}»`, menuKb);
 }
@@ -864,22 +880,44 @@ async function onCallback(cb: TgCallback): Promise<void> {
   if (cmd === "newq") {
     await answerCb(cb.id);
     const binding = await getBinding(chatId);
-    const set = await getDefaultSet(binding?.userId);
+    // Accept optional setId from callback data: "newq" or "newq:<setId>"
+    const explicitSetId = rest[0];
+    let set: { id: string; ownerId: string } | null = null;
+    if (explicitSetId) {
+      set = await db.questionSet.findUnique({ where: { id: explicitSetId }, select: { id: true, ownerId: true } });
+    } else {
+      set = await getDefaultSet(binding?.userId);
+    }
     if (!set) {
-      await sendMsg(
-        chatId,
-        "⚠️ Avval saytda savol seti yarating (kim-koproq.vercel.app).",
-        menuKb
-      );
+      await sendMsg(chatId, "⚠️ Avval savol seti yarating.", menuKb);
       return;
     }
     await clearSession(chatId);
     await setSession(chatId, "new_text", { setId: set.id });
-    return void (await sendMsg(
-      chatId,
-      "➕ Yangi savol matnini yozib yuboring (5–200 belgi):",
-      cancelKb
-    ));
+    return void (await sendMsg(chatId, "➕ Yangi savol matnini yozib yuboring (5–200 belgi):", cancelKb));
+  }
+
+  // setcreate_mode — finalize set creation
+  if (cmd === "setcreate_mode") {
+    const mode = rest[0] === "loose" ? "loose" : "strict";
+    await answerCb(cb.id);
+    const sess = await getSession(chatId);
+    if (sess?.state !== "setcreate_mode") {
+      return void (await sendMsg(chatId, "⚠️ Sessiya tugagan. Qaytadan urinib ko'ring.", menuKb));
+    }
+    const binding = await getBinding(chatId);
+    if (!binding) return void (await sendMsg(chatId, "⚠️ Avval ro'yxatdan o'ting.", menuKb));
+    const title = String(sess.payload.title || "");
+    const emoji = String(sess.payload.emoji || "❓");
+    const s = await db.questionSet.create({
+      data: { title, emoji, mode, ownerId: binding.userId, isPublic: true },
+    });
+    await clearSession(chatId);
+    return void (await sendMsg(chatId, `✅ Set yaratildi: ${s.emoji} ${esc(s.title)}\n\nEndi savol qo'shing:`, kb(
+      [btn("➕ Yangi savol", `newq:${s.id}`)],
+      [btn("📋 Setlar", "setlist:0")],
+      [btn("🏠 Menyu", "menu")]
+    )));
   }
 
   if (cmd === "cat") {
@@ -931,13 +969,15 @@ async function onCallback(cb: TgCallback): Promise<void> {
 
   if (cmd === "qe") {
     const qid = String(rest[0]);
+    const setId = rest[1] || "";
+    const page = rest[2] || "0";
     const qt = await questionText(qid);
     if (!qt) {
       await answerCb(cb.id, "Savol topilmadi", true);
       return;
     }
     await clearSession(chatId);
-    await setSession(chatId, "edit_text", { qid });
+    await setSession(chatId, "edit_text", { qid, setId, page });
     await answerCb(cb.id);
     return void (await sendMsg(
       chatId,
@@ -961,6 +1001,8 @@ async function onCallback(cb: TgCallback): Promise<void> {
 
   if (cmd === "qd") {
     const qid = String(rest[0]);
+    const setId = rest[1] || "";
+    const page = rest[2] || "0";
     const qt = await questionText(qid);
     if (!qt) {
       await answerCb(cb.id, "Savol topilmadi", true);
@@ -972,24 +1014,25 @@ async function onCallback(cb: TgCallback): Promise<void> {
       chatId,
       `🗑 O'chirilsinmi?\n\n${esc(qt.emoji)} ${esc(qt.text)}`,
       kb(
-        [btn("🗑 Ha, o'chirish", `qdel:${qid}`)],
-        [btn("❌ Bekor qilish", "cancel")]
+        [btn("🗑 Ha, o'chirish", `qdel:${qid}:${setId}:${page}`)],
+        [btn("❌ Bekor qilish", setId ? `setquestions:${setId}:${page}` : "cancel")]
       )
     ));
   }
 
   if (cmd === "qdel") {
     const qid = String(rest[0]);
+    const setId = rest[1] || "";
+    const page = rest[2] || "0";
     await answerCb(cb.id);
     await clearSession(chatId);
     const binding = await getBinding(chatId);
     const actorId = binding?.userId || `tg:${from.first_name || from.username || chatId}`;
     const okDel = await deleteQuestion(qid, actorId);
-    return void (await sendMsg(
-      chatId,
-      okDel ? "✅ Savol o'chirildi." : "⚠️ Savol topilmadi.",
-      menuKb
-    ));
+    if (setId) {
+      return void (await onCallback({ ...cb, data: `setquestions:${setId}:${page}` }));
+    }
+    return void (await sendMsg(chatId, okDel ? "✅ Savol o'chirildi." : "⚠️ Savol topilmadi.", menuKb));
   }
 
   // ----- pagination -----
@@ -1142,18 +1185,485 @@ async function onCallback(cb: TgCallback): Promise<void> {
     return;
   }
 
+  // ===== SET MANAGEMENT =====
+
+  // setlist — paginated list of sets (like the website's Setlar page)
+  if (cmd === "setlist") {
+    await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    const sets = await db.questionSet.findMany({
+      where: binding
+        ? { OR: [{ isPublic: true }, { ownerId: binding.userId }] }
+        : { isPublic: true },
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { questions: { where: { deletedAt: null } } } } },
+    });
+    if (sets.length === 0) {
+      return void (await sendMsg(chatId, "📋 Hozircha setlar yo'q.\n\nQuyidagi tugma orqali yangi set yarating:", kb([btn("➕ Yangi set", "setcreate")], [btn("🔙 Menyu", "menu")])));
+    }
+    const page = Number(rest[0] || 0);
+    const PAGE = 5;
+    const pages = Math.ceil(sets.length / PAGE);
+    const p = Math.min(Math.max(0, page), pages - 1);
+    const slice = sets.slice(p * PAGE, p * PAGE + PAGE);
+    const rows: InlineButton[][] = slice.map((s) => [
+      btn(`${s.emoji} ${trimTo(s.title, 30)} (${s._count.questions} savol)`, `set:${s.id}`),
+    ]);
+    const nav: InlineButton[] = [];
+    if (p > 0) nav.push(btn("◀️", `setlist:${p - 1}`));
+    nav.push(btn(`${p + 1}/${pages}`, "noop"));
+    if (p < pages - 1) nav.push(btn("▶️", `setlist:${p + 1}`));
+    rows.push(nav, [btn("➕ Yangi set", "setcreate")], [btn("🔙 Menyu", "menu")]);
+    return void (await sendMsg(chatId, `📋 <b>Savol setlari</b>\n\nJami: ${sets.length} ta set`, kb(...rows)));
+  }
+
+  // set:<setId> — set detail (like website's SetDetailView)
+  if (cmd === "set") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    const s = await db.questionSet.findUnique({ where: { id: setId }, include: { _count: { select: { questions: { where: { deletedAt: null } } } } } });
+    if (!s) return void (await sendMsg(chatId, "⚠️ Set topilmadi.", menuKb));
+    return void (await sendMsg(
+      chatId,
+      `${s.emoji} <b>${esc(s.title)}</b>\n\n${s.description ? esc(s.description) + "\n" : ""}Savollar: ${s._count.questions}\nRejim: ${s.mode}\n${s.isPublic ? "Ochiq" : "Shaxsiy"}`,
+      kb(
+        [btn("📝 Savollar", `setquestions:${setId}:0`)],
+        [btn("📊 Test o'tash (poll)", `settest:${setId}`)],
+        [btn("📈 Natijalar", `setresults:${setId}`)],
+        [btn("👥 Odamlar", `setpeople:${setId}`)],
+        [btn("🔗 Ulashish", `setshare:${setId}`)],
+        [btn("✏️ Tahrirlash", `setedit:${setId}`)],
+        [btn("🗑 O'chirish", `setdelete:${setId}`)],
+        [btn("🔙 Setlar", "setlist:0")]
+      )
+    ));
+  }
+
+  // setcreate — multi-step: title → emoji → mode → public
+  if (cmd === "setcreate") {
+    await answerCb(cb.id);
+    await clearSession(chatId);
+    await setSession(chatId, "setcreate_title", {});
+    return void (await sendMsg(chatId, "➕ <b>Yangi set yaratish</b>\n\nSet sarlavhasini yozib yuboring (2–120 belgi):", cancelKb));
+  }
+
+  // setedit — pick which field to edit
+  if (cmd === "setedit") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    const s = await db.questionSet.findUnique({ where: { id: setId } });
+    if (!s) return void (await sendMsg(chatId, "⚠️ Set topilmadi.", menuKb));
+    const binding = await getBinding(chatId);
+    if (s.ownerId !== binding?.userId) {
+      return void (await sendMsg(chatId, "⚠️ Faqat egasi tahrirlay oladi.", kb([btn("🔙 Set", `set:${setId}`)])));
+    }
+    return void (await sendMsg(chatId, `✏️ <b>${esc(s.title)}</b>\n\nNimani tahrirlaysiz?`, kb(
+      [btn("📝 Sarlavha", `setedit_title:${setId}`)],
+      [btn("😀 Emoji", `setedit_emoji:${setId}`)],
+      [btn("🔒 Rejim (strict/loose)", `setedit_mode:${setId}`)],
+      [btn("👁 Ochiq/Shaxsiy", `setedit_public:${setId}`)],
+      [btn("🔙 Set", `set:${setId}`)]
+    )));
+  }
+
+  // setdelete — confirm
+  if (cmd === "setdelete") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    const s = await db.questionSet.findUnique({ where: { id: setId } });
+    if (!s) return void (await sendMsg(chatId, "⚠️ Set topilmadi.", menuKb));
+    const binding = await getBinding(chatId);
+    if (s.ownerId !== binding?.userId) {
+      return void (await sendMsg(chatId, "⚠️ Faqat egasi o'chira oladi.", kb([btn("🔙 Set", `set:${setId}`)])));
+    }
+    return void (await sendMsg(chatId, `🗑 <b>O'chirilsinmi?</b>\n\n${s.emoji} ${esc(s.title)}`, kb(
+      [btn("🗑 Ha, o'chirish", `setdelete_confirm:${setId}`)],
+      [btn("❌ Bekor", `set:${setId}`)]
+    )));
+  }
+
+  if (cmd === "setdelete_confirm") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    if (!binding) return void (await sendMsg(chatId, "⚠️ Auth.", menuKb));
+    await db.questionSet.delete({ where: { id: setId } }).catch(() => {});
+    return void (await sendMsg(chatId, "✅ Set o'chirildi.", kb([btn("📋 Setlar", "setlist:0")], [btn("🏠 Menyu", "menu")])));
+  }
+
+  // setshare — show share URL
+  if (cmd === "setshare") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    const s = await db.questionSet.findUnique({ where: { id: setId } });
+    if (!s) return void (await sendMsg(chatId, "⚠️ Set topilmadi.", menuKb));
+    if (!s.isPublic) {
+      return void (await sendMsg(chatId, "⚠️ Bu set shaxsiy — faqat egasi ko'ra oladi.\nAvval setni ochiq (public) qiling.", kb([btn("🔙 Set", `set:${setId}`)])));
+    }
+    const miniAppUrl = process.env.NEXT_PUBLIC_MINI_APP_URL || "https://kim-koproq.vercel.app";
+    const shareUrl = `${miniAppUrl}?share=${setId}`;
+    await sendMsg(chatId, `🔗 <b>Ulashish havolasi:</b>\n\n${shareUrl}\n\nBu havolani do'stlaringizga yuboring — ular ro'yxatdan o'tmasdan so'rovnomada qatnasha oladi.`, kb([btn("🔙 Set", `set:${setId}`)]));
+    await sendMiniAppButton(chatId, "Yoki tugma orqali ochish:", shareUrl, "🚀 Setni ochish");
+    return;
+  }
+
+  // setresults / setpeople — open in Mini App
+  if (cmd === "setresults" || cmd === "setpeople") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    const miniAppUrl = process.env.NEXT_PUBLIC_MINI_APP_URL || "https://kim-koproq.vercel.app";
+    const shareUrl = `${miniAppUrl}?share=${setId}`;
+    const label = cmd === "setresults" ? "📈 Natijalar" : "👥 Odamlar";
+    await sendMsg(chatId, `${label} saytda to'liq ko'rinadi:`, kb([btn("🔙 Set", `set:${setId}`)]));
+    await sendMiniAppButton(chatId, "Mini App ni ochish:", shareUrl, `🌐 ${label}`);
+    return;
+  }
+
+  // setquestions — paginated list of questions in a set
+  if (cmd === "setquestions") {
+    const setId = rest[0];
+    const page = Number(rest[1] || 0);
+    await answerCb(cb.id);
+    const s = await db.questionSet.findUnique({ where: { id: setId } });
+    if (!s) return void (await sendMsg(chatId, "⚠️ Set topilmadi.", menuKb));
+    const questions = await db.question.findMany({ where: { setId, deletedAt: null }, orderBy: { createdAt: "asc" } });
+    if (questions.length === 0) {
+      const binding = await getBinding(chatId);
+      const canEdit = s.ownerId === binding?.userId || s.mode === "loose";
+      return void (await sendMsg(chatId, "📝 Hozircha savollar yo'q." + (canEdit ? "\n\n➕ tugmasi orqali qo'shing." : ""), kb(canEdit ? [btn("➕ Yangi savol", `newq:${setId}`)] : [], [btn("🔙 Set", `set:${setId}`)])));
+    }
+    const PAGE = 6;
+    const pages = Math.ceil(questions.length / PAGE);
+    const p = Math.min(Math.max(0, page), pages - 1);
+    const slice = questions.slice(p * PAGE, p * PAGE + PAGE);
+    const binding = await getBinding(chatId);
+    const canEdit = s.ownerId === binding?.userId || s.mode === "loose";
+    const rows: InlineButton[][] = slice.map((q) => [
+      btn(`${q.emoji} ${trimTo(q.text, 32)}`, `qe:${q.id}:${setId}:${p}`),
+    ]);
+    const nav: InlineButton[] = [];
+    if (p > 0) nav.push(btn("◀️", `setquestions:${setId}:${p - 1}`));
+    nav.push(btn(`${p + 1}/${pages}`, "noop"));
+    if (p < pages - 1) nav.push(btn("▶️", `setquestions:${setId}:${p + 1}`));
+    rows.push(nav);
+    if (canEdit) rows.push([btn("➕ Yangi savol", `newq:${setId}`)]);
+    rows.push([btn("🔙 Set", `set:${setId}`)]);
+    return void (await sendMsg(chatId, `📝 <b>Savollar</b>\n\nJami: ${questions.length} ta`, kb(...rows)));
+  }
+
+  // settest — group picker → native polls
+  if (cmd === "settest") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    if (!binding) {
+      const avatars = await getAvatarsForBot();
+      return void (await sendMsg(chatId, "👤 Avval o'zingizni tanlang:", whoKb(avatars, `settest:${setId}`)));
+    }
+    // Store the set ID in session for the fan-out
+    await setSession(chatId, "settest", { setId });
+    const avatars = await getAvatarsForBot(binding.userId);
+    const aCount = avatars.filter((m) => m.group === "A").length;
+    const bCount = avatars.filter((m) => m.group === "B").length;
+    return void (await sendMsg(chatId, "👥 Qaysi guruh uchun native so'rovnomalar yuborilsin?", kb(
+      [btn(`🅰 A guruh · ${aCount} a'zo`, `pollA:${setId}`), btn(`🅱 B guruh · ${bCount} a'zo`, `pollB:${setId}`)],
+      [btn("🔙 Set", `set:${setId}`)]
+    )));
+  }
+
+  // setedit sub-fields
+  if (cmd === "setedit_title") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    await setSession(chatId, "setedit_title", { setId });
+    return void (await sendMsg(chatId, "📝 Yangi sarlavhani yozib yuboring (2–120 belgi):", cancelKb));
+  }
+  if (cmd === "setedit_emoji") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    await setSession(chatId, "setedit_emoji", { setId });
+    return void (await sendMsg(chatId, "😀 Yangi emojini yuboring (1–8 belgi):", cancelKb));
+  }
+  if (cmd === "setedit_mode") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    return void (await sendMsg(chatId, "🔒 Rejimni tanlang:", kb(
+      [btn("🔐 Strict (faqat egasi)", `setedit_mode_apply:${setId}:strict`)],
+      [btn("🔓 Loose (har kim)", `setedit_mode_apply:${setId}:loose`)],
+      [btn("🔙 Set", `set:${setId}`)]
+    )));
+  }
+  if (cmd === "setedit_mode_apply") {
+    const setId = rest[0];
+    const mode = rest[1] === "loose" ? "loose" : "strict";
+    await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    const s = await db.questionSet.findUnique({ where: { id: setId } });
+    if (!s || s.ownerId !== binding?.userId) return void (await sendMsg(chatId, "⚠️ Ruxsat yo'q.", menuKb));
+    await db.questionSet.update({ where: { id: setId }, data: { mode } });
+    return void (await sendMsg(chatId, `✅ Rejim: ${mode}`, kb([btn("🔙 Set", `set:${setId}`)])));
+  }
+  if (cmd === "setedit_public") {
+    const setId = rest[0];
+    await answerCb(cb.id);
+    return void (await sendMsg(chatId, "👁 Ko'rinishni tanlang:", kb(
+      [btn("🌍 Ochiq (public)", `setedit_public_apply:${setId}:true`)],
+      [btn("🔒 Shaxsiy (private)", `setedit_public_apply:${setId}:false`)],
+      [btn("🔙 Set", `set:${setId}`)]
+    )));
+  }
+  if (cmd === "setedit_public_apply") {
+    const setId = rest[0];
+    const isPublic = rest[1] === "true";
+    await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    const s = await db.questionSet.findUnique({ where: { id: setId } });
+    if (!s || s.ownerId !== binding?.userId) return void (await sendMsg(chatId, "⚠️ Ruxsat yo'q.", menuKb));
+    await db.questionSet.update({ where: { id: setId }, data: { isPublic } });
+    return void (await sendMsg(chatId, `✅ ${isPublic ? "Ochiq" : "Shaxsiy"}`, kb([btn("🔙 Set", `set:${setId}`)])));
+  }
+
+  // ===== AVATAR MANAGEMENT =====
+
+  // avatarlist — paginated list of avatars
+  if (cmd === "avatarlist") {
+    await answerCb(cb.id);
+    const avatars = await getAvatarsForBot();
+    if (avatars.length === 0) {
+      return void (await sendMsg(chatId, "👥 Hozircha avatarlar yo'q.\n\nQuyidagi tugma orqali yangi avatar qo'shing:", kb([btn("➕ Yangi avatar", "avatarcreate")], [btn("📁 Guruhlar", "grouplist:0")], [btn("🔙 Menyu", "menu")])));
+    }
+    const page = Number(rest[0] || 0);
+    const PAGE = 8;
+    const pages = Math.ceil(avatars.length / PAGE);
+    const p = Math.min(Math.max(0, page), pages - 1);
+    const slice = avatars.slice(p * PAGE, p * PAGE + PAGE);
+    const rows: InlineButton[][] = slice.map((a) => [
+      btn(`${a.photoUrl ? "📷" : "👤"} ${a.short} (${a.group})`, `avatar:${a.id}`),
+    ]);
+    const nav: InlineButton[] = [];
+    if (p > 0) nav.push(btn("◀️", `avatarlist:${p - 1}`));
+    nav.push(btn(`${p + 1}/${pages}`, "noop"));
+    if (p < pages - 1) nav.push(btn("▶️", `avatarlist:${p + 1}`));
+    rows.push(nav, [btn("➕ Yangi avatar", "avatarcreate")], [btn("📁 Guruhlar", "grouplist:0")], [btn("🔙 Menyu", "menu")]);
+    return void (await sendMsg(chatId, `👥 <b>Aavatarlar</b>\n\nJami: ${avatars.length} ta`, kb(...rows)));
+  }
+
+  // avatar:<id> — avatar detail
+  if (cmd === "avatar") {
+    const avatarId = rest[0];
+    await answerCb(cb.id);
+    const a = await db.avatar.findUnique({ where: { id: avatarId }, include: { group: true, owner: true } });
+    if (!a) return void (await sendMsg(chatId, "⚠️ Avatar topilmadi.", menuKb));
+    const binding = await getBinding(chatId);
+    const isOwner = a.ownerId === binding?.userId || a.owner.telegramId === "2af1-demo-user" && binding?.userId;
+    return void (await sendMsg(
+      chatId,
+      `👤 <b>${esc(a.name)}</b>\n\nQisqa: ${a.shortName || "—"}\nGuruh: ${a.group?.name || "—"} (${a.group?.color || "—"})\nRasm: ${a.photoUrl ? "✅" : "❌"}\nIkona: ${a.iconName || "—"}`,
+      kb(
+        isOwner ? [btn("✏️ Tahrirlash", `avataredit:${a.id}`), btn("🗑 O'chirish", `avatardelete:${a.id}`)] : [],
+        [btn("🔙 Aavatarlar", "avatarlist:0")]
+      )
+    ));
+  }
+
+  // avatarcreate — multi-step: name → icon/photo → group
+  if (cmd === "avatarcreate") {
+    await answerCb(cb.id);
+    await clearSession(chatId);
+    await setSession(chatId, "avatarcreate_name", {});
+    return void (await sendMsg(chatId, "➕ <b>Yangi avatar</b>\n\nIsmni yozib yuboring (1–80 belgi):", cancelKb));
+  }
+
+  // avataredit — pick field
+  if (cmd === "avataredit") {
+    const avatarId = rest[0];
+    await answerCb(cb.id);
+    await setSession(chatId, "avataredit", { avatarId });
+    return void (await sendMsg(chatId, "✏️ Nimani tahrirlaysiz?", kb(
+      [btn("📝 Ism", `avataredit_name:${avatarId}`)],
+      [btn("📁 Guruh", `avataredit_group:${avatarId}`)],
+      [btn("🔙 Avatar", `avatar:${avatarId}`)]
+    )));
+  }
+  if (cmd === "avataredit_name") {
+    const avatarId = rest[0];
+    await answerCb(cb.id);
+    await setSession(chatId, "avataredit_name", { avatarId });
+    return void (await sendMsg(chatId, "📝 Yangi ismni yozib yuboring:", cancelKb));
+  }
+  if (cmd === "avataredit_group") {
+    const avatarId = rest[0];
+    await answerCb(cb.id);
+    const groups = await db.avatarGroup.findMany({ include: { _count: { select: { avatars: true } } } });
+    if (groups.length === 0) {
+      return void (await sendMsg(chatId, "📁 Guruhlar yo'q. Avval guruh yarating.", kb([btn("📁 Guruhlar", "grouplist:0")], [btn("🔙 Avatar", `avatar:${avatarId}`)])));
+    }
+    const rows: InlineButton[][] = groups.map((g) => [btn(`${g.name} (${g._count.avatars})`, `avataredit_group_apply:${avatarId}:${g.id}`)]);
+    rows.push([btn("🚫 Guruhdan chiqarish", `avataredit_group_apply:${avatarId}:none`)]);
+    rows.push([btn("🔙 Avatar", `avatar:${avatarId}`)]);
+    return void (await sendMsg(chatId, "📁 Guruhni tanlang:", kb(...rows)));
+  }
+  if (cmd === "avataredit_group_apply") {
+    const avatarId = rest[0];
+    const groupId = rest[1] === "none" ? null : rest[1];
+    await answerCb(cb.id);
+    await db.avatar.update({ where: { id: avatarId }, data: { groupId } }).catch(() => {});
+    return void (await sendMsg(chatId, "✅ Guruh o'zgartirildi.", kb([btn("🔙 Avatar", `avatar:${avatarId}`)])));
+  }
+
+  // avatardelete — confirm
+  if (cmd === "avatardelete") {
+    const avatarId = rest[0];
+    await answerCb(cb.id);
+    const a = await db.avatar.findUnique({ where: { id: avatarId } });
+    if (!a) return void (await sendMsg(chatId, "⚠️ Avatar topilmadi.", menuKb));
+    return void (await sendMsg(chatId, `🗑 <b>O'chirilsinmi?</b>\n\n${esc(a.name)}`, kb(
+      [btn("🗑 Ha, o'chirish", `avatardelete_confirm:${avatarId}`)],
+      [btn("❌ Bekor", `avatar:${avatarId}`)]
+    )));
+  }
+  if (cmd === "avatardelete_confirm") {
+    const avatarId = rest[0];
+    await answerCb(cb.id);
+    await db.avatar.delete({ where: { id: avatarId } }).catch(() => {});
+    return void (await sendMsg(chatId, "✅ Avatar o'chirildi.", kb([btn("👥 Aavatarlar", "avatarlist:0")], [btn("🏠 Menyu", "menu")])));
+  }
+
+  // ===== GROUP MANAGEMENT =====
+
+  // grouplist — list groups
+  if (cmd === "grouplist") {
+    await answerCb(cb.id);
+    const groups = await db.avatarGroup.findMany({ include: { _count: { select: { avatars: true } } }, orderBy: { createdAt: "asc" } });
+    if (groups.length === 0) {
+      return void (await sendMsg(chatId, "📁 Guruhlar yo'q.", kb([btn("➕ Yangi guruh", "groupcreate")], [btn("🔙 Aavatarlar", "avatarlist:0")])));
+    }
+    const rows: InlineButton[][] = groups.map((g) => [btn(`${g.name} (${g.color}) — ${g._count.avatars} a'zo`, `group:${g.id}`)]);
+    rows.push([btn("➕ Yangi guruh", "groupcreate")], [btn("🔙 Aavatarlar", "avatarlist:0")]);
+    return void (await sendMsg(chatId, `📁 <b>Guruhlar</b>\n\nJami: ${groups.length} ta`, kb(...rows)));
+  }
+
+  // group:<id> — group detail
+  if (cmd === "group") {
+    const groupId = rest[0];
+    await answerCb(cb.id);
+    const g = await db.avatarGroup.findUnique({ where: { id: groupId }, include: { _count: { select: { avatars: true } } } });
+    if (!g) return void (await sendMsg(chatId, "⚠️ Guruh topilmadi.", menuKb));
+    return void (await sendMsg(chatId, `📁 <b>${esc(g.name)}</b>\n\nRang: ${g.color}\nA'zolar: ${g._count.avatars}`, kb(
+      [btn("✏️ Tahrirlash", `groupedit:${g.id}`), btn("🗑 O'chirish", `groupdelete:${g.id}`)],
+      [btn("📁 Guruhlar", "grouplist:0")]
+    )));
+  }
+
+  // groupcreate — multi-step: name → color
+  if (cmd === "groupcreate") {
+    await answerCb(cb.id);
+    await setSession(chatId, "groupcreate_name", {});
+    return void (await sendMsg(chatId, "➕ <b>Yangi guruh</b>\n\nGuruh nomini yozib yuboring:", cancelKb));
+  }
+
+  // groupedit — pick field
+  if (cmd === "groupedit") {
+    const groupId = rest[0];
+    await answerCb(cb.id);
+    return void (await sendMsg(chatId, "✏️ Nimani tahrirlaysiz?", kb(
+      [btn("📝 Nomi", `groupedit_name:${groupId}`)],
+      [btn("🎨 Rang", `groupedit_color:${groupId}`)],
+      [btn("📁 Guruh", `group:${groupId}`)]
+    )));
+  }
+  if (cmd === "groupedit_name") {
+    const groupId = rest[0];
+    await answerCb(cb.id);
+    await setSession(chatId, "groupedit_name", { groupId });
+    return void (await sendMsg(chatId, "📝 Yangi nomni yozib yuboring:", cancelKb));
+  }
+  if (cmd === "groupedit_color") {
+    const groupId = rest[0];
+    await answerCb(cb.id);
+    return void (await sendMsg(chatId, "🎨 Rang/belgi tanlang (matn yuboring, masalan: A, B, Qizil):", kb(
+      [btn("A", `groupedit_color_apply:${groupId}:A`), btn("B", `groupedit_color_apply:${groupId}:B`)],
+      [btn("🔙 Guruh", `group:${groupId}`)]
+    )));
+  }
+  if (cmd === "groupedit_color_apply") {
+    const groupId = rest[0];
+    const color = rest[1];
+    await answerCb(cb.id);
+    await db.avatarGroup.update({ where: { id: groupId }, data: { color } }).catch(() => {});
+    return void (await sendMsg(chatId, `✅ Rang: ${color}`, kb([btn("📁 Guruh", `group:${groupId}`)])));
+  }
+
+  // groupdelete — confirm
+  if (cmd === "groupdelete") {
+    const groupId = rest[0];
+    await answerCb(cb.id);
+    const g = await db.avatarGroup.findUnique({ where: { id: groupId } });
+    if (!g) return void (await sendMsg(chatId, "⚠️ Guruh topilmadi.", menuKb));
+    return void (await sendMsg(chatId, `🗑 <b>O'chirilsinmi?</b>\n\n${esc(g.name)}\n\n⚠️ Guruhdagi avatarlar guruhsiz qoladi (o'chirilmaydi).`, kb(
+      [btn("🗑 Ha, o'chirish", `groupdelete_confirm:${groupId}`)],
+      [btn("❌ Bekor", `group:${groupId}`)]
+    )));
+  }
+  if (cmd === "groupdelete_confirm") {
+    const groupId = rest[0];
+    await answerCb(cb.id);
+    await db.avatar.updateMany({ where: { groupId }, data: { groupId: null } }).catch(() => {});
+    await db.avatarGroup.delete({ where: { id: groupId } }).catch(() => {});
+    return void (await sendMsg(chatId, "✅ Guruh o'chirildi.", kb([btn("📁 Guruhlar", "grouplist:0")], [btn("🏠 Menyu", "menu")])));
+  }
+
+  // ===== PROFILE =====
+  if (cmd === "profile") {
+    await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    if (!binding) {
+      const avatars = await getAvatarsForBot();
+      return void (await sendMsg(chatId, "👤 Siz hali ro'yxatdan o'tmagansiz.\n\nO'zingizni tanlang:", whoKb(avatars, "")));
+    }
+    const u = await db.user.findUnique({ where: { id: binding.userId } });
+    if (!u) return void (await sendMsg(chatId, "⚠️ Foydalanuvchi topilmadi.", menuKb));
+    const boundAvatar = binding.avatarId ? await db.avatar.findUnique({ where: { id: binding.avatarId } }) : null;
+    const miniAppUrl = process.env.NEXT_PUBLIC_MINI_APP_URL || "https://kim-koproq.vercel.app";
+    await sendMsg(
+      chatId,
+      `👤 <b>Profil</b>\n\n` +
+      `Ism: ${u.firstName || "—"} ${u.lastName || ""}\n` +
+      `Telegram: ${u.telegramName || "—"}\n` +
+      `Email: ${u.email || "—"}\n` +
+      `Avatar: ${boundAvatar ? esc(boundAvatar.name) : "tanlanmagan"}\n\n` +
+      `Profilni to'liq tahrirlash uchun Mini App ni oching:`,
+      kb(
+        [btn("🔁 Avatarni o'zgartirish", "who0")],
+        [btn("🌐 Mini App da tahrirlash", "open_site")],
+        [btn("🏠 Menyu", "menu")]
+      )
+    );
+    return;
+  }
+
+  // search — enter search URL mode
+  if (cmd === "search") {
+    await answerCb(cb.id);
+    await setSession(chatId, "search_url", {});
+    return void (await sendMsg(chatId,
+      "🔍 <b>Set izlash</b>\n\nSet URL manzilini yuboring:\n\n<i>Misol: https://kim-koproq.vercel.app/?share=abc123</i>",
+      cancelKb
+    ));
+  }
+
   await answerCb(cb.id);
 }
 
 // ---------- Entry ----------
 // Main menu reply keyboard — persistent buttons at the bottom of chat.
 // Layout: 2 columns x 2 rows
-//   📋 Setlar          |  👥 Guruh tanlash
-//   🔍 Izlash          |  ℹ️ Yordam
+//   📋 Setlar    |  👥 Avatari
+//   👤 Profil   |  🔍 Izlash
 const mainMenuReplyKb = (): ReplyKeyboard => ({
   keyboard: [
-    [{ text: "📋 Setlar" }, { text: "👥 Guruh tanlash" }],
-    [{ text: "🔍 Izlash" }, { text: "ℹ️ Yordam" }],
+    [{ text: "📋 Setlar" }, { text: "👥 Avatari" }],
+    [{ text: "👤 Profil" }, { text: "🔍 Izlash" }],
   ],
   resize_keyboard: true,
 });
@@ -1189,51 +1699,18 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
     }
 
     // ===== Reply keyboard button handlers =====
-    // These trigger the SAME inline keyboard flows that existed in the original bot.
-
-    // 📋 Setlar — question CRUD sub-menu (create / edit / delete / results / open site)
     if (rawText === "📋 Setlar") {
-      await clearSession(chatId);
-      const binding = await getBinding(chatId);
-      const set = await getDefaultSet(binding?.userId);
-      const count = set ? (await listQuestions(set.id)).length : 0;
-      return void (await sendMsg(
-        chatId,
-        `📋 <b>Savollarni boshqarish</b>\n\n` +
-        (set
-          ? `Aktiv setda ${count} ta savol bor.\nQuyidagi amallardan birini tanlang:`
-          : "Hozircha set topilmadi. Avval saytda set yarating."),
-        kb(
-          [btn("➕ Yangi savol qo'shish", "newq")],
-          [btn("📝 Savolni o'zgartirish", "editq0")],
-          [btn("🗑 Savolni o'chirish", "delq0")],
-          [btn("📊 Natijalarni ko'rish", "results")],
-          [btn("🌐 Saytda ochish", "open_site")]
-        )
-      ));
+      const fakeCb: TgCallback = { id: `reply_${Date.now()}`, from: { id: chatId, first_name: name }, message: { message_id: 0, chat: { id: chatId, type: "private" } }, data: "setlist:0" };
+      return void (await onCallback(fakeCb));
     }
-
-    // 👥 Guruh tanlash — group chooser + binding + native polls
-    if (rawText === "👥 Guruh tanlash") {
-      await clearSession(chatId);
-      const binding = await getBinding(chatId);
-      if (!binding) {
-        const avatars = await getAvatarsForBot();
-        return void (await sendMsg(
-          chatId,
-          "👤 Ovozlar saytga to'g'ri yozilishi uchun avval o'zingizni tanlang:",
-          whoKb(avatars, "grp")
-        ));
-      }
-      const avatars = await getAvatarsForBot(binding.userId);
-      return void (await sendMsg(
-        chatId,
-        "👥 Qaysi guruh uchun native so'rovnomalar yuborilsin?",
-        groupChooserKb(avatars)
-      ));
+    if (rawText === "👥 Avatari") {
+      const fakeCb: TgCallback = { id: `reply_${Date.now()}`, from: { id: chatId, first_name: name }, message: { message_id: 0, chat: { id: chatId, type: "private" } }, data: "avatarlist:0" };
+      return void (await onCallback(fakeCb));
     }
-
-    // 🔍 Izlash — enter search mode, user pastes URL
+    if (rawText === "👤 Profil") {
+      const fakeCb: TgCallback = { id: `reply_${Date.now()}`, from: { id: chatId, first_name: name }, message: { message_id: 0, chat: { id: chatId, type: "private" } }, data: "profile" };
+      return void (await onCallback(fakeCb));
+    }
     if (rawText === "🔍 Izlash") {
       await setSession(chatId, "search_url", {});
       return void (await sendMsgWithReplyKb(
@@ -1244,21 +1721,6 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
         backReplyKb()
       ));
     }
-
-    // ℹ️ Yordam — help text
-    if (rawText === "ℹ️ Yordam") {
-      return void (await sendMsgWithReplyKb(
-        chatId,
-        "ℹ️ <b>Yordam</b>\n\n" +
-        "<b>📋 Setlar</b> — savol qo'shish, o'zgartirish, o'chirish, natijalar\n" +
-        "<b>👥 Guruh tanlash</b> — native Telegram so'rovnomalar (poll) yuborish\n" +
-        "<b>🔍 Izlash</b> — set URL orqali so'rovnomada qatnashish\n\n" +
-        "Polllarda ovoz berganingiz sayt natijalariga avtomatik yoziladi.",
-        mainMenuReplyKb()
-      ));
-    }
-
-    // 🔙 Orqaga — return to main menu
     if (rawText === "🔙 Orqaga") {
       await clearSession(chatId);
       return onMenu(chatId, name);
@@ -1269,11 +1731,10 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
     // ===== Conversation state handlers (multi-step flows) =====
     const sess = await getSession(chatId);
 
-    // Search URL state — user pasted a URL or set ID
+    // Search URL state
     if (sess?.state === "search_url") {
       const query = rawText.trim();
       let setId: string | null = null;
-
       try {
         if (query.startsWith("http")) {
           const url = new URL(query);
@@ -1283,43 +1744,159 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
           setId = query.substring(idx + 6).split("&")[0];
         }
       } catch {}
-
       if (!setId && /^[a-z0-9]{20,30}$/i.test(query)) {
         setId = query;
       }
-
       if (setId) {
         await clearSession(chatId);
         const shareUrl = `${miniAppUrl}?share=${setId}`;
         await sendMsgWithReplyKb(chatId, "✅ Set topildi! Quyidagi tugma orqali ochish:", mainMenuReplyKb());
         await sendMiniAppButton(chatId, "So'rovnomada qatnashish uchun:", shareUrl, "🚀 Setni ochish");
       } else {
-        await sendMsgWithReplyKb(
-          chatId,
-          "⚠️ URL yoki set ID noto'g'ri formatda.\n\nQayta kiriting yoki 🔙 Orqaga bosing:",
-          backReplyKb()
-        );
+        await sendMsgWithReplyKb(chatId, "⚠️ URL yoki set ID noto'g'ri.\n\nQayta kiriting yoki 🔙 Orqaga bosing:", backReplyKb());
       }
       return;
     }
 
-    // New question text — user typed a question
+    // Set create: title step
+    if (sess?.state === "setcreate_title") {
+      const title = rawText.trim();
+      if (title.length < 2 || title.length > 120) {
+        return void (await sendMsg(chatId, "⚠️ Sarlavha 2–120 belgi bo'lsin.", cancelKb));
+      }
+      await setSession(chatId, "setcreate_emoji", { title });
+      return void (await sendMsg(chatId, "😀 Emoji yuboring (masalan: ⚡, ❓, 🔥) yoki '-' o'tkazib yuborish uchun:", cancelKb));
+    }
+    if (sess?.state === "setcreate_emoji") {
+      const emoji = rawText.trim() === "-" ? "❓" : rawText.trim().slice(0, 8) || "❓";
+      await setSession(chatId, "setcreate_mode", { title: sess.payload.title, emoji });
+      return void (await sendMsg(chatId, "🔒 Rejimni tanlang:", kb(
+        [btn("🔐 Strict (faqat egasi)", "setcreate_mode:strict")],
+        [btn("🔓 Loose (har kim)", "setcreate_mode:loose")],
+        [btn("❌ Bekor", "cancel")]
+      )));
+    }
+
+    // Set edit: title step
+    if (sess?.state === "setedit_title") {
+      const setId = String(sess.payload.setId);
+      const title = rawText.trim();
+      if (title.length < 2 || title.length > 120) {
+        return void (await sendMsg(chatId, "⚠️ Sarlavha 2–120 belgi.", cancelKb));
+      }
+      const binding = await getBinding(chatId);
+      const s = await db.questionSet.findUnique({ where: { id: setId } });
+      if (!s || s.ownerId !== binding?.userId) return void (await sendMsg(chatId, "⚠️ Ruxsat yo'q.", menuKb));
+      await db.questionSet.update({ where: { id: setId }, data: { title } });
+      await clearSession(chatId);
+      return void (await sendMsg(chatId, `✅ Sarlavha yangilandi: ${esc(title)}`, kb([btn("🔙 Set", `set:${setId}`)])));
+    }
+    if (sess?.state === "setedit_emoji") {
+      const setId = String(sess.payload.setId);
+      const emoji = rawText.trim().slice(0, 8) || "❓";
+      const binding = await getBinding(chatId);
+      const s = await db.questionSet.findUnique({ where: { id: setId } });
+      if (!s || s.ownerId !== binding?.userId) return void (await sendMsg(chatId, "⚠️ Ruxsat yo'q.", menuKb));
+      await db.questionSet.update({ where: { id: setId }, data: { emoji } });
+      await clearSession(chatId);
+      return void (await sendMsg(chatId, `✅ Emoji: ${emoji}`, kb([btn("🔙 Set", `set:${setId}`)])));
+    }
+
+    // Avatar create: name step
+    if (sess?.state === "avatarcreate_name") {
+      const avName = rawText.trim();
+      if (avName.length < 1 || avName.length > 80) {
+        return void (await sendMsg(chatId, "⚠️ Ism 1–80 belgi bo'lsin.", cancelKb));
+      }
+      await setSession(chatId, "avatarcreate_icon", { name: avName });
+      return void (await sendMsg(chatId, "📷 Rasm yuboring (foto) yoki professional ikonka nomini yozing (user, user-tie, user-graduate, user-nurse, user-cog, user-astronaut, user-check, palette, wrench, camera):", cancelKb));
+    }
+    if (sess?.state === "avatarcreate_icon") {
+      const avName = String(sess.payload.name);
+      const text = rawText.trim();
+      const binding = await getBinding(chatId);
+      if (!binding) return void (await sendMsg(chatId, "⚠️ Avval ro'yxatdan o'ting.", menuKb));
+
+      let photoUrl: string | null = null;
+      let iconName: string | null = null;
+
+      // If user sent a photo, we can't easily download it in serverless — use icon instead
+      if (msg.photo && msg.photo.length > 0) {
+        iconName = "user"; // fallback to icon
+      } else if (text) {
+        iconName = text;
+      } else {
+        iconName = "user";
+      }
+
+      // Pick a group (first available or none)
+      const groups = await db.avatarGroup.findMany();
+      const groupId = groups.length > 0 ? groups[0].id : null;
+
+      const avatar = await db.avatar.create({
+        data: { name: avName, shortName: avName.slice(0, 20), iconName, photoUrl, groupId, ownerId: binding.userId },
+      });
+      await clearSession(chatId);
+      return void (await sendMsg(chatId, `✅ Avatar yaratildi: ${esc(avName)}\n\nRasm yuklash uchun Mini App ni oching.`, kb([btn("👥 Aavatarlar", "avatarlist:0")], [btn("🏠 Menyu", "menu")])));
+    }
+
+    // Avatar edit: name step
+    if (sess?.state === "avataredit_name") {
+      const avatarId = String(sess.payload.avatarId);
+      const newName = rawText.trim();
+      if (newName.length < 1 || newName.length > 80) {
+        return void (await sendMsg(chatId, "⚠️ Ism 1–80 belgi.", cancelKb));
+      }
+      await db.avatar.update({ where: { id: avatarId }, data: { name: newName, shortName: newName.slice(0, 20) } }).catch(() => {});
+      await clearSession(chatId);
+      return void (await sendMsg(chatId, `✅ Ism: ${esc(newName)}`, kb([btn("🔙 Avatar", `avatar:${avatarId}`)])));
+    }
+
+    // Group create: name step
+    if (sess?.state === "groupcreate_name") {
+      const gName = rawText.trim();
+      if (gName.length < 1 || gName.length > 60) {
+        return void (await sendMsg(chatId, "⚠️ Nomi 1–60 belgi.", cancelKb));
+      }
+      await setSession(chatId, "groupcreate_color", { name: gName });
+      return void (await sendMsg(chatId, "🎨 Rang/belgi tanlang:", kb(
+        [btn("A", "groupcreate_color:A"), btn("B", "groupcreate_color:B")],
+        [btn("❌ Bekor", "cancel")]
+      )));
+    }
+    if (sess?.state === "groupcreate_color") {
+      const gName = String(sess.payload.name);
+      const color = rawText.trim().slice(0, 20) || "A";
+      const binding = await getBinding(chatId);
+      if (!binding) return void (await sendMsg(chatId, "⚠️ Auth.", menuKb));
+      const g = await db.avatarGroup.create({ data: { name: gName, color, ownerId: binding.userId } });
+      await clearSession(chatId);
+      return void (await sendMsg(chatId, `✅ Guruh yaratildi: ${esc(gName)} (${color})`, kb([btn("📁 Guruhlar", "grouplist:0")], [btn("🏠 Menyu", "menu")])));
+    }
+
+    // Group edit: name step
+    if (sess?.state === "groupedit_name") {
+      const groupId = String(sess.payload.groupId);
+      const newName = rawText.trim();
+      if (newName.length < 1 || newName.length > 60) {
+        return void (await sendMsg(chatId, "⚠️ Nomi 1–60 belgi.", cancelKb));
+      }
+      await db.avatarGroup.update({ where: { id: groupId }, data: { name: newName } }).catch(() => {});
+      await clearSession(chatId);
+      return void (await sendMsg(chatId, `✅ Nomi: ${esc(newName)}`, kb([btn("📁 Guruh", `group:${groupId}`)])));
+    }
+
+    // Existing question create/edit flows
     if (sess?.state === "new_text" && sess.payload?.setId) {
       return onNewQuestionText(chatId, msg.text || "", String(sess.payload.setId));
     }
-
-    // Edit question text — user typed the new text
     if (sess?.state === "edit_text") {
       return onEditQuestionText(chatId, msg.text || "", sess.payload);
     }
 
-    // Unknown text — show main menu
+    // Unknown text
     if (msg.text) {
-      return void (await sendMsgWithReplyKb(
-        chatId,
-        "Botdan foydalanish uchun quyidagi tugmalardan birini bosing 👇",
-        mainMenuReplyKb()
-      ));
+      return void (await sendMsgWithReplyKb(chatId, "Botdan foydalanish uchun quyidagi tugmalardan birini bosing 👇", mainMenuReplyKb()));
     }
   } catch (e) {
     console.error("[tg-bot] update failed:", e);
