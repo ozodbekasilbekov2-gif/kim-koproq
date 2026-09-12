@@ -16,6 +16,7 @@
 
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
+import { ensureDemoSeed } from "@/lib/demo-seed";
 
 // ---------- Types ----------
 type TgUser = { id: number; first_name?: string; username?: string };
@@ -373,12 +374,10 @@ async function deleteQuestion(qid: string, actorId: string): Promise<boolean> {
 
 // ---------- Avatars / members (via new schema) ----------
 // Avatars now live in DB instead of hardcoded MEMBERS array.
-// For the bot we load all avatars across groups for the demo set owner.
+// For the bot we load the 27 demo avatars from the system '2af1-demo-user'.
+// We call ensureDemoSeed() first to guarantee the demo data exists.
 
-// For the bot we load all avatars across groups for the demo set owner.
-// The 2AF1 demo avatars (27 members) belong to the system '2af1-demo-user',
-// NOT the bound Telegram user. So we always load from the demo set owner.
-async function getAvatarsForBot(userId?: string): Promise<
+async function getAvatarsForBot(_userId?: string): Promise<
   Array<{
     id: string;
     name: string;
@@ -387,41 +386,33 @@ async function getAvatarsForBot(userId?: string): Promise<
     photoUrl: string | null;
   }>
 > {
-  // Find the demo set and its owner — that's who owns the 27 member avatars
-  const demoSet = await db.questionSet.findFirst({
-    where: {
-      OR: [
-        { title: "Kim ko'proq...? — 2AF1 so'rovi" },
-        { title: { contains: "Kim ko'proq" } },
-        { title: { contains: "2AF1" } },
-        { title: { contains: "Birinchi set" } },
-      ],
-    },
-    orderBy: { createdAt: "asc" },
-    select: { ownerId: true },
-  });
-
-  let ownerId: string | undefined = demoSet?.ownerId;
-
-  // Fallback: if no demo set found, use the bound user's avatars (if any)
-  if (!ownerId && userId) ownerId = userId;
-
-  // Fallback: if still no owner, use the system demo user
-  if (!ownerId) {
-    const demoUser = await db.user.findUnique({
-      where: { telegramId: "2af1-demo-user" },
-      select: { id: true },
-    });
-    ownerId = demoUser?.id;
+  // Step 1: Ensure the demo data exists (creates 27 avatars + 2 groups + set
+  // + 29 questions if missing). This is idempotent and safe to call on every request.
+  try {
+    await ensureDemoSeed();
+  } catch (e) {
+    console.error("[tg-bot] ensureDemoSeed failed:", e);
   }
 
-  if (!ownerId) return [];
+  // Step 2: Find the system demo user that owns the 27 avatars
+  const demoUser = await db.user.findUnique({
+    where: { telegramId: "2af1-demo-user" },
+    select: { id: true },
+  });
+  if (!demoUser) {
+    console.warn("[tg-bot] demo user not found after ensureDemoSeed — returning empty list");
+    return [];
+  }
 
+  // Step 3: Load ALL avatars owned by the demo user (the 27 2AF1 members)
   const avatars = await db.avatar.findMany({
-    where: { ownerId },
+    where: { ownerId: demoUser.id },
     include: { group: true },
     orderBy: { createdAt: "asc" },
   });
+  console.log(
+    `[tg-bot] Loaded ${avatars.length} avatars from demo user (expected 27)`
+  );
   return avatars.map((a) => ({
     id: a.id,
     name: a.name,
