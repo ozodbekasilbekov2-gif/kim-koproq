@@ -103,6 +103,55 @@ async function sendMsg(
   return r.message_id;
 }
 
+// Send a message with a ReplyKeyboardMarkup (persistent buttons that replace
+// the text input field at the bottom of the chat).
+type ReplyButton = { text: string };
+type ReplyKeyboard = {
+  keyboard: ReplyButton[][];
+  resize_keyboard?: boolean;
+  one_time_keyboard?: boolean;
+};
+
+async function sendMsgWithReplyKb(
+  chatId: number,
+  text: string,
+  replyKb?: ReplyKeyboard
+): Promise<number | undefined> {
+  const r = await tg<{ message_id?: number }>("sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: replyKb
+      ? {
+          keyboard: replyKb.keyboard,
+          resize_keyboard: replyKb.resize_keyboard ?? true,
+          one_time_keyboard: replyKb.one_time_keyboard ?? false,
+        }
+      : undefined,
+  });
+  return r.message_id;
+}
+
+// Send an inline web_app button (opens Mini App). Reply keyboards don't
+// support web_app, so we send a separate inline button message.
+async function sendMiniAppButton(
+  chatId: number,
+  text: string,
+  miniAppUrl: string,
+  buttonText: string
+): Promise<void> {
+  await tg("sendMessage", {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: {
+      inline_keyboard: [[{ text: buttonText, web_app: { url: miniAppUrl } }]],
+    },
+  });
+}
+
 const answerCb = (cbId: string, text?: string, showAlert = false): Promise<unknown> =>
   tg("answerCallbackQuery", { callback_query_id: cbId, text, show_alert: showAlert });
 
@@ -1074,6 +1123,25 @@ async function onCallback(cb: TgCallback): Promise<void> {
 }
 
 // ---------- Entry ----------
+// Main menu reply keyboard — persistent buttons at the bottom of chat.
+// These buttons REPLACE the text input field. User taps them to navigate.
+// Layout: 2 columns x 2 rows
+//   📋 Setlar    |  👥 Avatari
+//   🔍 Izlash    |  ℹ️ Yordam
+const mainMenuReplyKb = (): ReplyKeyboard => ({
+  keyboard: [
+    [{ text: "📋 Setlar" }, { text: "👥 Avatari" }],
+    [{ text: "🔍 Izlash" }, { text: "ℹ️ Yordam" }],
+  ],
+  resize_keyboard: true,
+});
+
+// Sub-flow keyboard — just a back button
+const backReplyKb = (): ReplyKeyboard => ({
+  keyboard: [[{ text: "🔙 Orqaga" }]],
+  resize_keyboard: true,
+});
+
 export async function handleUpdate(update: TgUpdate): Promise<void> {
   try {
     if (!(await markUpdate(update.update_id))) return; // duplicate webhook delivery
@@ -1083,33 +1151,119 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
     if (!msg?.chat) return;
     const chatId = msg.chat.id;
     const isPrivate = msg.chat.type === "private";
-    const cmd = (msg.text || "").trim().split(/[@\s]+/)[0];
+    const rawText = (msg.text || "").trim();
+    const cmd = rawText.split(/[@\s]+/)[0];
     const name = msg.from?.first_name || msg.from?.username;
+    const miniAppUrl = process.env.NEXT_PUBLIC_MINI_APP_URL || "https://kim-koproq.vercel.app";
 
+    // Commands
     if (cmd === "/start" || cmd === "/menu") {
       if (isPrivate) await clearSession(chatId);
       return onMenu(chatId, name);
     }
     if (cmd === "/cancel") {
       if (isPrivate) await clearSession(chatId);
-      return void (await sendMsg(chatId, "❌ Bekor qilindi.", menuKb));
+      return void (await sendMsgWithReplyKb(chatId, "❌ Bekor qilindi.", mainMenuReplyKb()));
     }
-    if (cmd === "/who") {
-      const avatars = await getAvatarsForBot();
-      return void (await sendMsg(chatId, "👤 O'zingizni tanlang:", whoKb(avatars, "")));
+
+    // Reply keyboard button handlers (button labels arrive as text messages)
+    if (rawText === "📋 Setlar") {
+      await sendMsgWithReplyKb(
+        chatId,
+        "📋 <b>Savol setlari</b>\n\nQuyidagi tugma orqali to'liq saytni oching — setlarni yaratish, tahrirlash, o'chirish va test o'tash:",
+        mainMenuReplyKb()
+      );
+      await sendMiniAppButton(chatId, "🌐 Mini App ni ochish", miniAppUrl, "🌐 Saytni ochish");
+      return;
+    }
+    if (rawText === "👥 Avatari") {
+      await sendMsgWithReplyKb(
+        chatId,
+        "👥 <b>Aavatarlar</b>\n\nOdamlar va guruhlarni boshqarish — yangi avatar qo'shish, rasm yoki professional ikonka tanlash, guruh yaratish:",
+        mainMenuReplyKb()
+      );
+      await sendMiniAppButton(chatId, "🌐 Mini App ni ochish", miniAppUrl, "🌐 Saytni ochish");
+      return;
+    }
+    if (rawText === "🔍 Izlash") {
+      // Enter search mode — user can paste a set URL or ID
+      await setSession(chatId, "search_url", {});
+      return void (await sendMsgWithReplyKb(
+        chatId,
+        "🔍 <b>Set izlash</b>\n\nSet savollari URL manzilini shu yerga yuboring:\n\n" +
+        "<i>Misol: https://kim-koproq.vercel.app/?share=abc123</i>\n\n" +
+        "Yoki set IDsini kiriting:",
+        backReplyKb()
+      ));
+    }
+    if (rawText === "ℹ️ Yordam") {
+      return void (await sendMsgWithReplyKb(
+        chatId,
+        "ℹ️ <b>Yordam</b>\n\n" +
+        "<b>📋 Setlar</b> — savol to'plamlarini boshqarish (yaratish, tahrirlash, o'chirish, test o'tash, natijalar)\n" +
+        "<b>👥 Avatari</b> — odamlar va guruhlarni boshqarish\n" +
+        "<b>🔍 Izlash</b> — set URL orqali so'rovnomada qatnashish (ro'yxatdan o'tmasdan)\n\n" +
+        "Hammasi Mini App ichida ishlaydi — to'liq funksional sayt.",
+        mainMenuReplyKb()
+      ));
+    }
+    if (rawText === "🔙 Orqaga") {
+      await clearSession(chatId);
+      return onMenu(chatId, name);
     }
 
     if (!isPrivate) return;
+
+    // Check conversation state for multi-step flows
     const sess = await getSession(chatId);
+
+    // Search URL state — user pasted a URL or set ID
+    if (sess?.state === "search_url") {
+      const query = rawText.trim();
+      let setId: string | null = null;
+
+      // Try to extract setId from URL
+      try {
+        if (query.startsWith("http")) {
+          const url = new URL(query);
+          setId = url.searchParams.get("share");
+        } else if (query.includes("share=")) {
+          const idx = query.indexOf("share=");
+          setId = query.substring(idx + 6).split("&")[0];
+        }
+      } catch {}
+
+      // Try as raw set ID (cuid format: 20-30 alphanumeric chars)
+      if (!setId && /^[a-z0-9]{20,30}$/i.test(query)) {
+        setId = query;
+      }
+
+      if (setId) {
+        await clearSession(chatId);
+        const shareUrl = `${miniAppUrl}?share=${setId}`;
+        await sendMsgWithReplyKb(chatId, "✅ Set topildi! Quyidagi tugma orqali ochish:", mainMenuReplyKb());
+        await sendMiniAppButton(chatId, "So'rovnomada qatnashish uchun:", shareUrl, "🚀 Setni ochish");
+      } else {
+        await sendMsgWithReplyKb(
+          chatId,
+          "⚠️ URL yoki set ID noto'g'ri formatda.\n\nQayta kiriting yoki 🔙 Orqaga bosing:",
+          backReplyKb()
+        );
+      }
+      return;
+    }
+
     if (sess?.state === "new_text" && sess.payload?.setId) {
       return onNewQuestionText(chatId, msg.text || "", String(sess.payload.setId));
     }
     if (sess?.state === "edit_text") return onEditQuestionText(chatId, msg.text || "", sess.payload);
+
+    // Unknown text — show main menu
     if (msg.text) {
-      return void (await sendMsg(
+      return void (await sendMsgWithReplyKb(
         chatId,
-        "Botdan foydalanish uchun menyudagi tugmalardan birini bosing 👇",
-        menuKb
+        "Botdan foydalanish uchun quyidagi tugmalardan birini bosing 👇",
+        mainMenuReplyKb()
       ));
     }
   } catch (e) {
@@ -1118,5 +1272,5 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
 }
 
 async function onMenu(chatId: number, name?: string): Promise<void> {
-  await sendMsg(chatId, menuText(name), menuKb);
+  await sendMsgWithReplyKb(chatId, menuText(name), mainMenuReplyKb());
 }
