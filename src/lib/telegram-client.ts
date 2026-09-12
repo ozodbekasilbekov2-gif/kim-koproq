@@ -80,7 +80,7 @@ export async function loginViaTelegram(): Promise<{ token: string; user: any } |
   // Step 2: check if we have initData
   const initData = getTelegramInitData();
   if (!initData) {
-    console.warn("[telegram-auth] SDK loaded but initData is empty");
+    console.warn("[telegram-auth] SDK loaded but initData is empty — not opened from Telegram");
     return null;
   }
 
@@ -92,9 +92,14 @@ export async function loginViaTelegram(): Promise<{ token: string; user: any } |
       body: JSON.stringify({ initData }),
     });
     if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.warn("[telegram-auth] server rejected:", res.status, errText);
-      return null;
+      let errDetail = `HTTP ${res.status}`;
+      try {
+        const errBody = await res.json();
+        errDetail = errBody.error || errDetail;
+      } catch {}
+      console.warn("[telegram-auth] server rejected:", errDetail);
+      // Return the error so the caller can display a specific message
+      return { error: errDetail } as any;
     }
     const data = await res.json();
     if (!data.token) {

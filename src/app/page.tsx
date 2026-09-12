@@ -52,14 +52,19 @@ export default function Home() {
         // Token is stale — re-login via initData
         const data = await loginViaTelegram();
         if (data?.user) me = data.user;
+        else if ((data as any)?.error) {
+          toast.error(`Telegram login xatosi: ${(data as any).error}`);
+        }
       }
     } else {
       // No stored token — fresh login via Telegram initData
       const data = await loginViaTelegram();
-      if (data?.user) me = data.user;
-      else {
-        // loginViaTelegram returns null only if SDK not ready or initData invalid.
-        // Since SDK is ready, this means initData validation failed on the server.
+      if (data?.user) {
+        me = data.user;
+      } else if ((data as any)?.error) {
+        toast.error(`Telegram login xatosi: ${(data as any).error}`);
+      } else {
+        // loginViaTelegram returns null if SDK not ready or initData empty
         toast.error("Telegram orqali kirib bo'lmadi. Botdan qayta urining.");
       }
     }
