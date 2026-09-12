@@ -60,14 +60,29 @@ CREATE TABLE IF NOT EXISTS question_history (
   new_text TEXT,
   at TIMESTAMPTZ DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS tg_users (
+  chat_id BIGINT PRIMARY KEY,
+  member_id TEXT NOT NULL,
+  tg_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 `
 
 async function init() {
   const q = await createQuery()
   // Fast path: when the schema already exists, skip DDL + seeding so every
   // serverless cold start costs a single round-trip instead of ~40.
-  const [{ tbl_ok }] = await q(`SELECT to_regclass('public.questions') IS NOT NULL AS tbl_ok`)
-  if (!tbl_ok) {
+  const [flags] = await q(`SELECT to_regclass('public.questions') IS NOT NULL AS tbl_ok,
+                                  to_regclass('public.tg_users') IS NOT NULL AS tg_ok`)
+  if (!flags.tg_ok) {
+    await q(`CREATE TABLE IF NOT EXISTS tg_users (
+      chat_id BIGINT PRIMARY KEY,
+      member_id TEXT NOT NULL,
+      tg_name TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`)
+  }
+  if (!flags.tbl_ok) {
     for (const stmt of SCHEMA.split(';').map((s) => s.trim()).filter(Boolean)) {
       await q(stmt)
     }
