@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       { name: "Zaynab", group: groupB, icon: "user-check" },
       { name: "Saida", group: groupB, icon: "user-astronaut" },
     ];
-    const avatars = [];
+    const avatars: Awaited<ReturnType<typeof db.avatar.create>>[] = [];
     for (const a of avatarsData) {
       avatars.push(
         await db.avatar.create({

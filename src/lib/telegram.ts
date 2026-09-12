@@ -7,7 +7,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
  * Docs: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
  */
 
-export function webhookSecret(token: string): string {
+export function webhookSecret(token: string): Buffer {
   return createHash("sha256").update(token).digest();
 }
 
