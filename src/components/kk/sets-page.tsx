@@ -1030,6 +1030,9 @@ function ResultsView({ setId }: { setId: string }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [cat, setCat] = useState<string>("all");
+  // Modal: when set, shows a detail dialog for a specific question + group
+  // with ALL voter avatars and their percentages (no truncation)
+  const [detail, setDetail] = useState<{ q: any; g: string; targetId: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -1118,7 +1121,8 @@ function ResultsView({ setId }: { setId: string }) {
                     return (
                       <div
                         key={targetId}
-                        className={`poll-opt ${isTop ? "top" : ""}`}
+                        className={`poll-opt ${isTop ? "top" : ""} cursor-pointer hover:bg-white/5`}
+                        onClick={() => setDetail({ q, g, targetId })}
                       >
                         <div className="flex items-center gap-2">
                           {/* Target avatar (who was voted for) */}
@@ -1147,11 +1151,11 @@ function ResultsView({ setId }: { setId: string }) {
                               />
                             </div>
                           </div>
-                          {/* Voter stack — small avatars of who voted (max 3, +N for the rest) */}
+                          {/* Voter stack — small avatars of ALL who voted (no limit) */}
                           {votersArr.length > 0 && (
-                            <div className="flex items-center gap-1 shrink-0">
-                              <div className="flex">
-                                {votersArr.slice(0, 3).map((voterId: string, i: number) => (
+                            <div className="flex items-center gap-1 shrink-0 max-w-[120px]">
+                              <div className="flex flex-wrap">
+                                {votersArr.map((voterId: string, i: number) => (
                                   <div
                                     key={voterId + i}
                                     className="w-5 h-5 rounded-full overflow-hidden border border-background bg-secondary flex items-center justify-center"
@@ -1167,11 +1171,6 @@ function ResultsView({ setId }: { setId: string }) {
                                     )}
                                   </div>
                                 ))}
-                                {votersArr.length > 3 && (
-                                  <span className="text-[10px] text-muted-foreground ml-1">
-                                    +{votersArr.length - 3}
-                                  </span>
-                                )}
                               </div>
                             </div>
                           )}
@@ -1306,7 +1305,142 @@ function ResultsView({ setId }: { setId: string }) {
       <div className="space-y-3">
         {cat === "__people" ? renderPeople() : renderQuestions(cat)}
       </div>
+
+      {/* Detail modal: shows all voters for a specific target avatar */}
+      {detail && data && (
+        <VoterDetailModal
+          q={detail.q}
+          g={detail.g}
+          targetId={detail.targetId}
+          data={data}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ---------- Voter detail modal ----------
+// Shows ALL voters for a specific question + group + target avatar.
+// No truncation — every voter's avatar + name is shown in a grid.
+function VoterDetailModal({
+  q,
+  g,
+  targetId,
+  data,
+  onClose,
+}: {
+  q: any;
+  g: string;
+  targetId: string;
+  data: any;
+  onClose: () => void;
+}) {
+  const qResults = data.results[q.id] || {};
+  const byTarget = qResults[g] || {};
+  const votersArr = (byTarget[targetId] || []) as string[];
+  const total = Object.values(byTarget).reduce(
+    (s: number, v: any) => s + v.length,
+    0
+  );
+  const pct = total ? Math.round((votersArr.length / total) * 100) : 0;
+  const targetAv = data.avatars.find((a: any) => a.id === targetId);
+  const hasPhoto = !!targetAv?.photoUrl;
+
+  // Helper functions (same as in ResultsView, duplicated for this component)
+  const voterImg = (voterId: string): string | null => {
+    const info = data.voterInfo?.[voterId];
+    return info?.photo || null;
+  };
+  const voterName = (voterId: string): string => {
+    const info = data.voterInfo?.[voterId];
+    return info?.name || "Foydalanuvchi";
+  };
+  const voterInitial = (voterId: string): string => {
+    return voterName(voterId)[0] || "?";
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="text-2xl">{q.emoji}</span>
+            <span className={`gtag gtag-${g}`}>{g} GURUH</span>
+          </DialogTitle>
+          <DialogDescription className="text-sm leading-snug pt-1">
+            {q.text}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Target avatar summary */}
+        <div className="q-card p-4 flex items-center gap-3 my-2">
+          <div className="w-16 h-16 rounded-xl overflow-hidden bg-secondary flex items-center justify-center shrink-0">
+            {hasPhoto ? (
+              <img src={targetAv.photoUrl} alt={targetAv.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-2xl font-bold text-muted-foreground">
+                {targetAv?.name?.[0] || "?"}
+              </div>
+            )}
+          </div>
+          <div className="flex-1">
+            <div className="font-bold text-base">{targetAv?.name || "?"}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              📊 {pct}% · 👥 {votersArr.length} ovoz
+            </div>
+            <div className="mt-1.5 h-2 bg-white/5 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand-lime"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* All voters grid (no limit) */}
+        <div className="space-y-2">
+          <div className="text-xs text-muted-foreground">
+            Ovoz berganlar ({votersArr.length}):
+          </div>
+          {votersArr.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-6">
+              Hali ovoz yo'q
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {votersArr.map((voterId: string, i: number) => (
+                <div
+                  key={voterId + i}
+                  className="flex flex-col items-center gap-1 p-2 rounded-lg bg-white/3 border border-border hover:border-brand-lime/30 transition"
+                >
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-secondary flex items-center justify-center">
+                    {voterImg(voterId) ? (
+                      <img
+                        src={voterImg(voterId)!}
+                        alt={voterName(voterId)}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-lg font-bold text-muted-foreground">
+                        {voterInitial(voterId)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-center font-medium truncate w-full">
+                    {voterName(voterId)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Yopish</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

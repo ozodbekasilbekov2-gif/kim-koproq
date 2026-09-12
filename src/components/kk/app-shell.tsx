@@ -1,24 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   Plus,
   Pencil,
   Trash2,
   Search,
-  Camera,
-  MessageSquare,
   LayoutGrid,
   Users,
   User,
   Zap,
   LogOut,
   X,
-  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiJson } from "@/lib/api-client";
 import { toast } from "sonner";
 import type { KKUser } from "@/app/page";
 import { SetsPage } from "./sets-page";
@@ -26,9 +22,7 @@ import { AvatarsPage } from "./avatars-page";
 import { ProfilePage } from "./profile-page";
 
 export type PageKey = "sets" | "avatars" | "profile";
-
 export type ActionMode = "create" | "edit" | "delete" | null;
-
 export type SelectionState = {
   mode: ActionMode;
   selectedIds: string[];
@@ -38,9 +32,11 @@ export type SelectionState = {
 export function AppShell({
   user,
   onLogout,
+  onOpenSharedSet,
 }: {
   user: KKUser;
   onLogout: () => void;
+  onOpenSharedSet?: (setId: string) => void;
 }) {
   const [page, setPage] = useState<PageKey>("sets");
   const [selection, setSelection] = useState<SelectionState>({
@@ -61,7 +57,6 @@ export function AppShell({
 
   const handleAction = (mode: ActionMode) => {
     if (selection.mode === mode) {
-      // toggle off
       setSelection({ ...selection, mode: null, selectedIds: [] });
     } else {
       setSelection({ ...selection, mode, selectedIds: [] });
@@ -76,12 +71,9 @@ export function AppShell({
     setSelection((s) => ({ ...s, search }));
   };
 
-  // For create: trigger create modal directly (no selection)
-  // For edit/delete: enter selection mode
-
-  // Universal action buttons — square shape, colored like the screenshot
+  // Universal action buttons — square shape, original neon colors
   const actionButtons: {
-    key: ActionMode | "search" | "create";
+    key: ActionMode | "search";
     label: string;
     icon: React.ReactNode;
     bg: string;
@@ -92,21 +84,19 @@ export function AppShell({
     {
       key: "create",
       label: "Yaratish",
-      icon: <Plus className="w-5 h-5" />,
+      icon: <Plus className="w-5 h-5" strokeWidth={2.5} />,
       bg: "bg-brand-yellow text-black hover:bg-yellow-300",
       onClick: () => {
-        // toggle create mode (creates immediately when item is created via +)
-        if (page === "profile") return; // profile disables universal actions
+        if (page === "profile") return;
         setMode("create");
-        // if create mode is set, the page will show a create modal — handled in each page
       },
       disabled: page === "profile",
     },
     {
       key: "edit",
       label: "Tahrirlash",
-      icon: <Pencil className="w-5 h-5" />,
-      bg: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+      icon: <Pencil className="w-5 h-5" strokeWidth={2} />,
+      bg: "bg-white/5 text-brand-lime hover:bg-white/10 border border-brand-lime/30",
       onClick: () => {
         if (page === "profile") return;
         handleAction("edit");
@@ -117,8 +107,8 @@ export function AppShell({
     {
       key: "delete",
       label: "O'chirish",
-      icon: <Trash2 className="w-5 h-5" />,
-      bg: "bg-brand-red text-white hover:bg-red-600",
+      icon: <Trash2 className="w-5 h-5" strokeWidth={2} />,
+      bg: "bg-brand-red/20 text-brand-red hover:bg-brand-red/30 border border-brand-red/40",
       onClick: () => {
         if (page === "profile") return;
         handleAction("delete");
@@ -128,32 +118,33 @@ export function AppShell({
     },
   ];
 
+  // Bottom nav — square buttons with original neon colors
   const bottomNav: {
     key: PageKey;
     label: string;
     icon: React.ReactNode;
-    bg: string;
+    activeBg: string;
     active: boolean;
   }[] = [
     {
       key: "sets",
       label: "Setlar",
-      icon: <LayoutGrid className="w-5 h-5" />,
-      bg: "bg-brand-coral/30 text-brand-coral",
+      icon: <LayoutGrid className="w-5 h-5" strokeWidth={2} />,
+      activeBg: "bg-brand-coral/20 text-brand-coral border border-brand-coral/40",
       active: page === "sets",
     },
     {
       key: "avatars",
       label: "Avatari",
-      icon: <Users className="w-5 h-5" />,
-      bg: "bg-chart-1/30 text-chart-1",
+      icon: <Users className="w-5 h-5" strokeWidth={2} />,
+      activeBg: "bg-brand-lime/20 text-brand-lime border border-brand-lime/40",
       active: page === "avatars",
     },
     {
       key: "profile",
       label: "Profil",
-      icon: <User className="w-5 h-5" />,
-      bg: "bg-muted text-muted-foreground",
+      icon: <User className="w-5 h-5" strokeWidth={2} />,
+      activeBg: "bg-white/10 text-white border border-white/20",
       active: page === "profile",
     },
   ];
@@ -172,36 +163,21 @@ export function AppShell({
     toast.success("Tizimdan chiqdingiz");
   };
 
-  // Selection footer actions
-  const confirmDelete = async (deleteFn: (ids: string[]) => Promise<void>) => {
-    if (selection.selectedIds.length === 0) {
-      toast.error("Avval element(lar) ni tanlang");
-      return;
-    }
-    try {
-      await deleteFn(selection.selectedIds);
-      toast.success(`${selection.selectedIds.length} ta o'chirildi`);
-      resetSelection();
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-  };
-
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background relative">
       {/* Top bar with logo + universal action buttons */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border">
         <div className="max-w-5xl mx-auto px-3 py-3 flex items-center gap-3">
-          {/* Logo */}
+          {/* Logo — original vibe */}
           <button
             onClick={resetSelection}
             className="flex items-center gap-2 shrink-0"
           >
-            <div className="w-9 h-9 rounded-xl bg-brand-gradient flex items-center justify-center shadow-lg shadow-primary/30">
-              <Zap className="w-5 h-5 text-white" strokeWidth={3} />
+            <div className="w-10 h-10 rounded-xl bg-brand-gradient flex items-center justify-center shadow-lg glow-lime">
+              <Zap className="w-5 h-5 text-white" strokeWidth={3} fill="white" />
             </div>
-            <span className="font-extrabold text-base sm:text-lg tracking-tight hidden sm:block">
-              Kim ko'proq?
+            <span className="brand text-lg sm:text-xl tracking-wide hidden sm:block">
+              KIM KO'PROQ<span className="text-brand-yellow">...?</span>
             </span>
           </button>
 
@@ -210,16 +186,45 @@ export function AppShell({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Qidirish..."
+              placeholder="Qidirish... yoki set URL'ni kiriting"
               value={selection.search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-3 h-10"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && onOpenSharedSet) {
+                  const query = selection.search.trim();
+                  if (!query) return;
+                  // Try to extract setId from URL or raw string
+                  // Supports: https://kim-koproq.vercel.app/?share=abc123
+                  //           /?share=abc123
+                  //           abc123 (raw setId)
+                  let setId: string | null = null;
+                  try {
+                    // Check if it's a URL
+                    if (query.startsWith("http") || query.startsWith("/")) {
+                      const url = new URL(query.startsWith("/") ? `${window.location.origin}${query}` : query);
+                      setId = url.searchParams.get("share");
+                    }
+                  } catch {
+                    // Not a URL — try as raw setId (cuid format)
+                    if (/^[a-z0-9]{20,30}$/i.test(query)) {
+                      setId = query;
+                    }
+                  }
+                  if (setId) {
+                    onOpenSharedSet(setId);
+                    setSearch("");
+                  } else {
+                    toast.error("URL yoki set ID noto'g'ri formatda");
+                  }
+                }
+              }}
+              className="pl-9 pr-3 h-10 bg-card border-border"
               disabled={page === "profile"}
             />
             {selection.search && (
               <button
                 onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-brand-lime"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -237,7 +242,7 @@ export function AppShell({
                 disabled={b.disabled}
                 onClick={b.onClick}
                 title={b.label}
-                className={`w-10 h-10 rounded-xl ${b.bg} ${b.active ? "ring-2 ring-offset-2 ring-ring" : ""}`}
+                className={`w-10 h-10 rounded-xl ${b.bg} ${b.active ? "ring-2 ring-ring" : ""}`}
               >
                 {b.icon}
               </Button>
@@ -249,20 +254,18 @@ export function AppShell({
         <div className="max-w-5xl mx-auto px-3 pb-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {page === "sets" && "📋 Savol setlari"}
-            {page === "avatars" && "👥 Aavatarlar / odamlar"}
+            {page === "avatars" && "👥 Avatarlar / odamlar"}
             {page === "profile" && "👤 Profil"}
           </span>
-          <span className="truncate max-w-[200px]">
-            👤 {userName}
-          </span>
+          <span className="truncate max-w-[200px]">👤 {userName}</span>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="flex-1 max-w-5xl mx-auto w-full px-3 py-4 pb-32">
+      <main className="flex-1 max-w-5xl mx-auto w-full px-3 py-4 pb-32 relative z-10">
         {selection.mode === "edit" && (
-          <div className="mb-3 rounded-xl border border-secondary bg-secondary/30 p-3 flex items-center justify-between">
-            <span className="text-sm">
+          <div className="mb-3 rounded-xl border border-brand-lime/40 bg-brand-lime/10 p-3 flex items-center justify-between">
+            <span className="text-sm text-brand-lime">
               ✏️ Tahrirlash uchun elementni tanlang ({selection.selectedIds.length} tanlandi)
             </span>
             <Button variant="ghost" size="sm" onClick={resetSelection}>
@@ -271,8 +274,8 @@ export function AppShell({
           </div>
         )}
         {selection.mode === "delete" && (
-          <div className="mb-3 rounded-xl border border-destructive/50 bg-destructive/10 p-3 flex items-center justify-between">
-            <span className="text-sm text-destructive">
+          <div className="mb-3 rounded-xl border border-brand-red/50 bg-brand-red/10 p-3 flex items-center justify-between">
+            <span className="text-sm text-brand-red">
               🗑️ O'chirish uchun tanlang ({selection.selectedIds.length})
             </span>
             <div className="flex items-center gap-2">
@@ -280,7 +283,6 @@ export function AppShell({
                 size="sm"
                 variant="destructive"
                 onClick={() => {
-                  // The current page receives a deleteAll event
                   window.dispatchEvent(
                     new CustomEvent("kk:confirm-delete", {
                       detail: { ids: selection.selectedIds },
@@ -337,8 +339,8 @@ export function AppShell({
               }}
               className={`flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-2xl transition-all active:scale-95 ${
                 n.active
-                  ? `${n.bg} ring-2 ring-ring`
-                  : "bg-muted/40 text-muted-foreground hover:bg-muted"
+                  ? n.activeBg
+                  : "bg-white/5 text-muted-foreground hover:bg-white/10 border border-transparent"
               }`}
             >
               <div className="w-7 h-7 flex items-center justify-center">

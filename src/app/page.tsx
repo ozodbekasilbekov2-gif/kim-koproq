@@ -147,5 +147,11 @@ export default function Home() {
     return <LoginScreen onLogin={(u) => setUser(u)} />;
   }
 
-  return <AppShell user={currentUser} onLogout={() => setUser(null)} />;
+  return (
+    <AppShell
+      user={currentUser}
+      onLogout={() => setUser(null)}
+      onOpenSharedSet={(setId) => setGuestSetId(setId)}
+    />
+  );
 }
