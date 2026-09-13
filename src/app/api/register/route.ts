@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hashPassword, isValidEmail, isStrongEnoughPassword } from "@/lib/auth-utils";
 import { ensureUserDemoSet } from "@/lib/demo-seed";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = rateLimit(ip, ip, "register");
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Juda ko'p urinish. 1 daqiqadan keyin qayta urinib ko'ring." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
     const body = await req.json();
     const { email, password, firstName, lastName } = body;
     if (!email || !password) {

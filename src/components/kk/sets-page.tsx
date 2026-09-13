@@ -1480,9 +1480,12 @@ function ShareDialog({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const shareUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/?share=${setId}`
-    : `https://kim-koproq.vercel.app/?share=${setId}`;
+  // Use window.location.origin if available (works for any deployment),
+  // fallback to NEXT_PUBLIC_MINI_APP_URL env var, or hardcoded vercel URL.
+  const baseUrl = typeof window !== "undefined"
+    ? window.location.origin
+    : process.env.NEXT_PUBLIC_MINI_APP_URL || "https://kim-koproq.vercel.app";
+  const shareUrl = `${baseUrl}/?share=${setId}`;
 
   const copy = async () => {
     try {

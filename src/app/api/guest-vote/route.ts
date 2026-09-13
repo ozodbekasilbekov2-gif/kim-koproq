@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 /**
  * Guest vote endpoint — saves anonymous votes to the database.
@@ -18,6 +19,14 @@ import { db } from "@/lib/db";
  */
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = rateLimit(ip, ip, "guest-vote");
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Juda ko'p so'rov. Keyin qayta urinib ko'ring." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
     const body = await req.json();
     const { guestToken, guestName, setId, questionId, targets } = body;
 

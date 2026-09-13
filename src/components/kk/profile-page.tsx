@@ -22,9 +22,11 @@ import type { KKUser } from "@/app/page";
 export function ProfilePage({
   user,
   onLogout,
+  onUserUpdated,
 }: {
   user: KKUser;
   onLogout: () => void;
+  onUserUpdated?: (updated: KKUser) => void;
 }) {
   const [firstName, setFirstName] = useState(user.firstName || "");
   const [lastName, setLastName] = useState(user.lastName || "");
@@ -61,8 +63,8 @@ export function ProfilePage({
         body: JSON.stringify({ firstName, lastName, avatarUrl }),
       });
       toast.success("Profil saqlandi ✅");
-      // update parent state if needed — caller handles
-      Object.assign(user, updated);
+      // Notify parent component to update state (triggers re-render)
+      if (onUserUpdated) onUserUpdated(updated);
     } catch (e: any) {
       toast.error(e.message);
     } finally {

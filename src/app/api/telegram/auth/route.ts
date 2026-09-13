@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { validateTelegramInitData, normalizeBotToken } from "@/lib/telegram";
 import { signJwt } from "@/lib/jwt";
 import { ensureUserDemoSet } from "@/lib/demo-seed";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 /**
  * Telegram Mini App auto-login endpoint.
@@ -12,6 +13,14 @@ import { ensureUserDemoSet } from "@/lib/demo-seed";
  */
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = rateLimit(ip, ip, "telegram-auth");
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Juda ko'p urinish. Keyin qayta urinib ko'ring." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
     const body = await req.json();
     const initData = body.initData;
     if (!initData || typeof initData !== "string" || initData.length < 10) {

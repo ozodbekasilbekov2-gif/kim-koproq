@@ -280,14 +280,22 @@ async function clearSession(chatId: number): Promise<void> {
 // Webhook dedupe: returns false when this update was already processed.
 async function markUpdate(updateId: number): Promise<boolean> {
   try {
-    await db.tgUpdate.upsert({
+    // Use createMany with skipDuplicates if available, otherwise check existence first
+    // For Prisma + PostgreSQL, we can use a count check
+    const existing = await db.tgUpdate.findUnique({
       where: { updateId: String(updateId) },
-      create: { updateId: String(updateId) },
-      update: {},
+      select: { updateId: true },
     });
-    // If we got here without error, it's a new update (best-effort dedupe)
-    return true;
+    if (existing) {
+      // Already processed — skip
+      return false;
+    }
+    await db.tgUpdate.create({
+      data: { updateId: String(updateId) },
+    });
+    return true; // New update
   } catch {
+    // Race condition: another request created it concurrently — treat as duplicate
     return false;
   }
 }
@@ -1445,7 +1453,7 @@ async function onCallback(cb: TgCallback): Promise<void> {
     nav.push(btn(`${p + 1}/${pages}`, "noop"));
     if (p < pages - 1) nav.push(btn("▶️", `avatarlist:${p + 1}`));
     rows.push(nav, [btn("➕ Yangi avatar", "avatarcreate")], [btn("📁 Guruhlar", "grouplist:0")], [btn("🔙 Menyu", "menu")]);
-    return void (await sendMsg(chatId, `👥 <b>Aavatarlar</b>\n\nJami: ${avatars.length} ta`, kb(...rows)));
+    return void (await sendMsg(chatId, `👥 <b>Avatarlar</b>\n\nJami: ${avatars.length} ta`, kb(...rows)));
   }
 
   // avatar:<id> — avatar detail
@@ -1461,7 +1469,7 @@ async function onCallback(cb: TgCallback): Promise<void> {
       `👤 <b>${esc(a.name)}</b>\n\nQisqa: ${a.shortName || "—"}\nGuruh: ${a.group?.name || "—"} (${a.group?.color || "—"})\nRasm: ${a.photoUrl ? "✅" : "❌"}\nIkona: ${a.iconName || "—"}`,
       kb(
         isOwner ? [btn("✏️ Tahrirlash", `avataredit:${a.id}`), btn("🗑 O'chirish", `avatardelete:${a.id}`)] : [],
-        [btn("🔙 Aavatarlar", "avatarlist:0")]
+        [btn("🔙 Avatarlar", "avatarlist:0")]
       )
     ));
   }
@@ -1525,8 +1533,15 @@ async function onCallback(cb: TgCallback): Promise<void> {
   if (cmd === "avatardelete_confirm") {
     const avatarId = rest[0];
     await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    if (!binding) return void (await sendMsg(chatId, "⚠️ Avval ro'yxatdan o'ting.", menuKb));
+    const a = await db.avatar.findUnique({ where: { id: avatarId } });
+    if (!a) return void (await sendMsg(chatId, "⚠️ Avatar topilmadi.", menuKb));
+    if (a.ownerId !== binding.userId) {
+      return void (await sendMsg(chatId, "⚠️ Faqat egasi o'chira oladi.", kb([btn("👥 Avatarlar", "avatarlist:0")])));
+    }
     await db.avatar.delete({ where: { id: avatarId } }).catch(() => {});
-    return void (await sendMsg(chatId, "✅ Avatar o'chirildi.", kb([btn("👥 Aavatarlar", "avatarlist:0")], [btn("🏠 Menyu", "menu")])));
+    return void (await sendMsg(chatId, "✅ Avatar o'chirildi.", kb([btn("👥 Avatarlar", "avatarlist:0")], [btn("🏠 Menyu", "menu")])));
   }
 
   // ===== GROUP MANAGEMENT =====
@@ -1536,10 +1551,10 @@ async function onCallback(cb: TgCallback): Promise<void> {
     await answerCb(cb.id);
     const groups = await db.avatarGroup.findMany({ include: { _count: { select: { avatars: true } } }, orderBy: { createdAt: "asc" } });
     if (groups.length === 0) {
-      return void (await sendMsg(chatId, "📁 Guruhlar yo'q.", kb([btn("➕ Yangi guruh", "groupcreate")], [btn("🔙 Aavatarlar", "avatarlist:0")])));
+      return void (await sendMsg(chatId, "📁 Guruhlar yo'q.", kb([btn("➕ Yangi guruh", "groupcreate")], [btn("🔙 Avatarlar", "avatarlist:0")])));
     }
     const rows: InlineButton[][] = groups.map((g) => [btn(`${g.name} (${g.color}) — ${g._count.avatars} a'zo`, `group:${g.id}`)]);
-    rows.push([btn("➕ Yangi guruh", "groupcreate")], [btn("🔙 Aavatarlar", "avatarlist:0")]);
+    rows.push([btn("➕ Yangi guruh", "groupcreate")], [btn("🔙 Avatarlar", "avatarlist:0")]);
     return void (await sendMsg(chatId, `📁 <b>Guruhlar</b>\n\nJami: ${groups.length} ta`, kb(...rows)));
   }
 
@@ -1608,6 +1623,13 @@ async function onCallback(cb: TgCallback): Promise<void> {
   if (cmd === "groupdelete_confirm") {
     const groupId = rest[0];
     await answerCb(cb.id);
+    const binding = await getBinding(chatId);
+    if (!binding) return void (await sendMsg(chatId, "⚠️ Avval ro'yxatdan o'ting.", menuKb));
+    const g = await db.avatarGroup.findUnique({ where: { id: groupId } });
+    if (!g) return void (await sendMsg(chatId, "⚠️ Guruh topilmadi.", menuKb));
+    if (g.ownerId !== binding.userId) {
+      return void (await sendMsg(chatId, "⚠️ Faqat egasi o'chira oladi.", kb([btn("📁 Guruhlar", "grouplist:0")])));
+    }
     await db.avatar.updateMany({ where: { groupId }, data: { groupId: null } }).catch(() => {});
     await db.avatarGroup.delete({ where: { id: groupId } }).catch(() => {});
     return void (await sendMsg(chatId, "✅ Guruh o'chirildi.", kb([btn("📁 Guruhlar", "grouplist:0")], [btn("🏠 Menyu", "menu")])));
@@ -1837,7 +1859,7 @@ export async function handleUpdate(update: TgUpdate): Promise<void> {
         data: { name: avName, shortName: avName.slice(0, 20), iconName, photoUrl, groupId, ownerId: binding.userId },
       });
       await clearSession(chatId);
-      return void (await sendMsg(chatId, `✅ Avatar yaratildi: ${esc(avName)}\n\nRasm yuklash uchun Mini App ni oching.`, kb([btn("👥 Aavatarlar", "avatarlist:0")], [btn("🏠 Menyu", "menu")])));
+      return void (await sendMsg(chatId, `✅ Avatar yaratildi: ${esc(avName)}\n\nRasm yuklash uchun Mini App ni oching.`, kb([btn("👥 Avatarlar", "avatarlist:0")], [btn("🏠 Menyu", "menu")])));
     }
 
     // Avatar edit: name step

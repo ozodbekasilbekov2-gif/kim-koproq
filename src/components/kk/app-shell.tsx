@@ -33,10 +33,12 @@ export function AppShell({
   user,
   onLogout,
   onOpenSharedSet,
+  onUserUpdated,
 }: {
   user: KKUser;
   onLogout: () => void;
   onOpenSharedSet?: (setId: string) => void;
+  onUserUpdated?: (updated: KKUser) => void;
 }) {
   const [page, setPage] = useState<PageKey>("sets");
   const [selection, setSelection] = useState<SelectionState>({
@@ -345,7 +347,7 @@ export function AppShell({
             onClearSelection={resetSelection}
           />
         )}
-        {page === "profile" && <ProfilePage user={user} onLogout={handleLogout} />}
+        {page === "profile" && <ProfilePage user={user} onLogout={handleLogout} onUserUpdated={onUserUpdated} />}
       </main>
 
       {/* Bottom nav — square buttons */}

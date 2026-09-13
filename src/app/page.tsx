@@ -152,6 +152,7 @@ export default function Home() {
       user={currentUser}
       onLogout={() => setUser(null)}
       onOpenSharedSet={(setId) => setGuestSetId(setId)}
+      onUserUpdated={(u) => setUser(u)}
     />
   );
 }

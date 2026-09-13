@@ -18,6 +18,15 @@ export async function POST(req: NextRequest) {
     if (!q || q.deletedAt || q.setId !== setId) {
       return NextResponse.json({ error: "Savol topilmadi" }, { status: 404 });
     }
+
+    // Parse set's groupIds (if any) to validate that voted avatars belong to allowed groups
+    let allowedGroupIds: string[] | null = null;
+    try {
+      if (q.set.groupIds) {
+        allowedGroupIds = JSON.parse(q.set.groupIds);
+      }
+    } catch {}
+
     const targets: Record<string, string | null> = body.targets || {};
     for (const [groupId, avatarId] of Object.entries(targets)) {
       if (avatarId === null || avatarId === undefined || avatarId === "") {
@@ -30,6 +39,10 @@ export async function POST(req: NextRequest) {
       if (!avatar) return NextResponse.json({ error: `Avatar topilmadi: ${avatarId}` }, { status: 400 });
       // Self-vote skip — compare against the user's selected avatar (selectedAvatarId)
       if (user.selectedAvatarId && avatar.id === user.selectedAvatarId) continue;
+      // If the set has groupIds, validate the avatar belongs to an allowed group
+      if (allowedGroupIds && avatar.groupId && !allowedGroupIds.includes(avatar.groupId)) {
+        return NextResponse.json({ error: "Bu avatar ushbu set uchun ruxsat etilmagan" }, { status: 403 });
+      }
       await db.vote.upsert({
         where: {
           voterId_questionId_groupId: {
