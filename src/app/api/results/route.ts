@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
-import { getDemoUserId, ensureDemoSeed } from "@/lib/demo-seed";
 
 // GET /api/results?setId=...
 // Returns aggregated results for all questions in a set.
@@ -11,13 +10,6 @@ import { getDemoUserId, ensureDemoSeed } from "@/lib/demo-seed";
 export async function GET(req: NextRequest) {
   const setId = req.nextUrl.searchParams.get("setId");
   if (!setId) return NextResponse.json({ error: "setId?" }, { status: 400 });
-
-  // Ensure demo data exists (so demo avatars are available)
-  try {
-    await ensureDemoSeed();
-  } catch (e) {
-    console.error("[results] ensureDemoSeed failed:", e);
-  }
 
   const set = await db.questionSet.findUnique({ where: { id: setId } });
   if (!set) return NextResponse.json({ error: "Set topilmadi" }, { status: 404 });
@@ -33,13 +25,15 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "asc" },
   });
 
-  // Load avatars from ALL relevant owners: set owner + demo user + current user
-  // This ensures target avatars are always found for display.
+  // Load avatars from the SET'S OWNER only.
+  // Each user has their OWN 27 demo avatars, so we load from whoever owns
+  // this set — that's whose results we're showing.
+  // (Plus the current user if they're logged in and viewing someone else's set)
   const ownerIds = new Set<string>();
-  ownerIds.add(set.ownerId); // the set's owner (has the questions + maybe avatars)
-  const demoUserId = await getDemoUserId();
-  if (demoUserId) ownerIds.add(demoUserId); // 27 demo 2AF1 members
-  if (user) ownerIds.add(user.id); // current user's own avatars (if logged in)
+  ownerIds.add(set.ownerId); // the set's owner (has the questions + avatars)
+  if (user && user.id !== set.ownerId) {
+    ownerIds.add(user.id); // current user's own avatars (if viewing someone else's set)
+  }
 
   const avatars = await db.avatar.findMany({
     where: { ownerId: { in: Array.from(ownerIds) } },

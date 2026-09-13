@@ -87,8 +87,10 @@ export function GuestMode({
         }
       } catch {}
 
-      const av = await apiJson<{ avatars: GuestAvatar[] }>("/api/avatars");
-      const gr = await apiJson<{ groups: GuestGroup[] }>("/api/groups");
+      // Load avatars and groups from the SET'S OWNER (not the current user,
+      // since the guest is not logged in)
+      const av = await apiJson<{ avatars: GuestAvatar[] }>(`/api/avatars?setId=${setId}`);
+      const gr = await apiJson<{ groups: GuestGroup[] }>(`/api/groups?setId=${setId}`);
 
       let filteredAvatars = av.avatars;
       let filteredGroups = gr.groups;

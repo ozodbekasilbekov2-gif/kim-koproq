@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hashPassword, isValidEmail, isStrongEnoughPassword } from "@/lib/auth-utils";
+import { ensureUserDemoSet } from "@/lib/demo-seed";
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,6 +29,16 @@ export async function POST(req: NextRequest) {
         lastName: lastName?.trim() || null,
       },
     });
+
+    // Create the user's personal demo set (27 avatars + 29 questions)
+    // This ensures each user has their OWN set with their OWN share link.
+    try {
+      await ensureUserDemoSet(user.id);
+    } catch (e) {
+      console.error("[register] demo set creation failed:", e);
+      // Don't fail registration if demo set creation fails
+    }
+
     return NextResponse.json({
       id: user.id,
       email: user.email,

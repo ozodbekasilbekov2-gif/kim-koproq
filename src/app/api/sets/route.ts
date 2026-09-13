@@ -1,19 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
-import { ensureDemoSeed } from "@/lib/demo-seed";
+import { ensureUserDemoSet } from "@/lib/demo-seed";
 
 // List all public sets + sets owned by user
+// Also ensures the logged-in user has their OWN personal demo set.
 export async function GET(req: NextRequest) {
-  // Auto-seed the original 2AF1 demo data (27 avatars + 29 questions) if missing
-  try {
-    await ensureDemoSeed();
-  } catch (e) {
-    console.error("[sets GET] auto-seed failed:", e);
-    // Continue anyway — don't break the listing
+  const user = await getCurrentUserDb(req);
+
+  // If the user is logged in, ensure they have their own personal demo set
+  // (27 avatars + 29 questions). This gives each user their own share link
+  // and their own results page.
+  if (user) {
+    try {
+      await ensureUserDemoSet(user.id);
+    } catch (e) {
+      console.error("[sets GET] user demo set creation failed:", e);
+    }
   }
 
-  const user = await getCurrentUserDb(req);
   const where = user
     ? { OR: [{ isPublic: true }, { ownerId: user.id }] }
     : { isPublic: true };

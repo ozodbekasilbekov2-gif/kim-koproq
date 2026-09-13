@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { validateTelegramInitData, normalizeBotToken } from "@/lib/telegram";
 import { signJwt } from "@/lib/jwt";
+import { ensureUserDemoSet } from "@/lib/demo-seed";
 
 /**
  * Telegram Mini App auto-login endpoint.
@@ -62,6 +63,13 @@ export async function POST(req: NextRequest) {
           telegramPhoto: tgUser.photo_url || user.telegramPhoto,
         },
       });
+    }
+
+    // Ensure the user has their OWN personal demo set (27 avatars + 29 questions)
+    try {
+      await ensureUserDemoSet(user.id);
+    } catch (e) {
+      console.error("[telegram/auth] demo set creation failed:", e);
     }
 
     const jwt = await signJwt({

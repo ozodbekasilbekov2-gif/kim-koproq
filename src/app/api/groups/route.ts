@@ -1,46 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
-import { ensureDemoSeed, getDemoUserId } from "@/lib/demo-seed";
+import { ensureUserDemoSet } from "@/lib/demo-seed";
 
-// GET /api/groups — returns the current user's groups PLUS the demo groups
-// (A guruh, B guruh) from the system "2af1-demo-user".
+// GET /api/groups — returns the current user's groups.
+// Each user has their OWN groups (A guruh, B guruh) with their OWN avatars.
+//
+// Optional query param: ?setId=xxx — if provided (guest mode), loads groups
+// from that set's owner instead.
 export async function GET(req: NextRequest) {
-  // Ensure the demo data exists
-  try {
-    await ensureDemoSeed();
-  } catch (e) {
-    console.error("[groups GET] demo seed failed:", e);
-  }
-
   const user = await getCurrentUserDb(req);
 
-  const ownerIds: string[] = [];
+  // If ?setId= is provided (guest mode), load groups from that set's owner
+  const setId = req.nextUrl.searchParams.get("setId");
+  if (setId && !user) {
+    const set = await db.questionSet.findUnique({
+      where: { id: setId },
+      select: { ownerId: true },
+    });
+    if (!set) return NextResponse.json({ groups: [] });
 
-  // Always include the demo user's groups (A and B with 27 members)
-  const demoUserId = await getDemoUserId();
-  if (demoUserId) ownerIds.push(demoUserId);
+    const groups = await db.avatarGroup.findMany({
+      where: { ownerId: set.ownerId },
+      include: { _count: { select: { avatars: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    return NextResponse.json({ groups });
+  }
 
-  // Include the current user's groups
-  if (user) ownerIds.push(user.id);
+  if (!user) return NextResponse.json({ groups: [] });
 
-  if (ownerIds.length === 0) {
-    return NextResponse.json({ groups: [] });
+  // Ensure the user has their personal demo groups
+  try {
+    await ensureUserDemoSet(user.id);
+  } catch (e) {
+    console.error("[groups GET] user demo set failed:", e);
   }
 
   const groups = await db.avatarGroup.findMany({
-    where: { ownerId: { in: ownerIds } },
+    where: { ownerId: user.id },
     include: { _count: { select: { avatars: true } } },
-    orderBy: [{ ownerId: "asc" }, { createdAt: "asc" }],
+    orderBy: { createdAt: "asc" },
   });
 
-  // Tag demo groups
-  const result = groups.map((g) => ({
-    ...g,
-    isDemo: demoUserId ? g.ownerId === demoUserId : false,
-  }));
-
-  return NextResponse.json({ groups: result });
+  return NextResponse.json({ groups });
 }
 
 export async function POST(req: NextRequest) {
