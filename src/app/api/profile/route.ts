@@ -34,6 +34,11 @@ export async function PUT(req: NextRequest) {
     if (typeof body.avatarUrl === "string") {
       data.avatarUrl = body.avatarUrl.trim().slice(0, 1000) || null;
     }
+    if (typeof body.selectedAvatarId === "string") {
+      data.selectedAvatarId = body.selectedAvatarId.trim() || null;
+    } else if (body.selectedAvatarId === null) {
+      data.selectedAvatarId = null;
+    }
     const updated = await db.user.update({ where: { id: user.id }, data });
     return NextResponse.json({
       id: updated.id,
@@ -41,6 +46,7 @@ export async function PUT(req: NextRequest) {
       firstName: updated.firstName,
       lastName: updated.lastName,
       avatarUrl: updated.avatarUrl,
+      selectedAvatarId: updated.selectedAvatarId,
       telegramName: updated.telegramName,
       telegramPhoto: updated.telegramPhoto,
     });

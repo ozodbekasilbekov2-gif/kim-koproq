@@ -308,11 +308,11 @@ export function GuestMode({
         )}
 
         {view === "results" && (
-          <SharedResultsView setId={setId} />
+          <SharedResultsView setId={setId} mode="results" />
         )}
 
         {view === "people" && (
-          <SharedResultsView setId={setId} />
+          <SharedResultsView setId={setId} mode="people" />
         )}
       </main>
     </div>

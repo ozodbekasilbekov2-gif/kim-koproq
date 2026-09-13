@@ -19,7 +19,7 @@ const catClass = (c: string) => "cat-" + String(c).split(" ")[0];
 const avatarImg = (a: any) => (a?.photoUrl ? a.photoUrl : null);
 const avatarInitial = (a: any) => (a?.shortName || a?.name || "?")[0];
 
-export function SharedResultsView({ setId }: { setId: string }) {
+export function SharedResultsView({ setId, mode = "results" }: { setId: string; mode?: "results" | "people" }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [cat, setCat] = useState<string>("all");
@@ -248,50 +248,55 @@ export function SharedResultsView({ setId }: { setId: string }) {
     });
   }
 
+  // If mode="people", force show people view. If mode="results", show results + category chips.
+  const showPeople = mode === "people" || cat === "__people";
+
   return (
     <div className="space-y-4">
       <div className="text-center">
         <h2 className="brand text-4xl leading-none">
-          {cat === "__people" ? (
+          {showPeople ? (
             <>ODAMLAR <span className="text-brand-coral">👤</span></>
           ) : (
             <>NATIJALAR <span className="text-brand-yellow">🏆</span></>
           )}
         </h2>
         <p className="text-xs text-muted-foreground mt-2">
-          {cat === "__people"
+          {showPeople
             ? "Har bir avatar necha marta tanlangan va qaysi savolda g'alaba qozongan"
             : `👥 ${data.voters}/${data.totalMembers} ovoz berdi · ✅ ${data.completed} tugatdi`}
         </p>
       </div>
 
-      {/* Category chips */}
-      <div className="flex flex-wrap gap-2 justify-center">
-        <button
-          onClick={() => setCat("all")}
-          className={`pill ${cat === "all" ? "bg-brand-lime text-black" : "bg-white/5 text-muted-foreground border border-border"}`}
-        >
-          Barchasi
-        </button>
-        {cats.map((c) => (
+      {/* Category chips — only in results mode */}
+      {mode !== "people" && (
+        <div className="flex flex-wrap gap-2 justify-center">
           <button
-            key={c}
-            onClick={() => setCat(c)}
-            className={`pill ${cat === c ? catClass(c) + " ring-2 ring-ring" : "bg-white/5 text-muted-foreground border border-border"}`}
+            onClick={() => setCat("all")}
+            className={`pill ${cat === "all" ? "bg-brand-lime text-black" : "bg-white/5 text-muted-foreground border border-border"}`}
           >
-            {c}
+            Barchasi
           </button>
-        ))}
-        <button
-          onClick={() => setCat("__people")}
-          className={`pill ${cat === "__people" ? "bg-brand-coral/20 text-brand-coral border border-brand-coral/40 ring-2 ring-ring" : "bg-white/5 text-muted-foreground border border-border"}`}
-        >
-          👤 Odamlar
-        </button>
-      </div>
+          {cats.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCat(c)}
+              className={`pill ${cat === c ? catClass(c) + " ring-2 ring-ring" : "bg-white/5 text-muted-foreground border border-border"}`}
+            >
+              {c}
+            </button>
+          ))}
+          <button
+            onClick={() => setCat("__people")}
+            className={`pill ${cat === "__people" ? "bg-brand-coral/20 text-brand-coral border border-brand-coral/40 ring-2 ring-ring" : "bg-white/5 text-muted-foreground border border-border"}`}
+          >
+            👤 Odamlar
+          </button>
+        </div>
+      )}
 
       <div className="space-y-3">
-        {cat === "__people" ? renderPeople() : renderQuestions(cat)}
+        {showPeople ? renderPeople() : renderQuestions(cat)}
       </div>
     </div>
   );

@@ -674,8 +674,8 @@ function SetDetailView({
       )}
 
       {view === "test" && <TestView setId={setId} questions={questions} />}
-      {view === "results" && <SharedResultsView setId={setId} />}
-      {view === "people" && <SharedResultsView setId={setId} />}
+      {view === "results" && <SharedResultsView setId={setId} mode="results" />}
+      {view === "people" && <SharedResultsView setId={setId} mode="people" />}
 
       {showShare && (
         <ShareDialog setId={setId} title={set.title} onClose={() => setShowShare(false)} />
@@ -853,6 +853,7 @@ function QuestionDialog({
 }
 
 // Take the test
+// Take the test — includes "SEN KIMSAN?" avatar picker (like guest mode)
 function TestView({ setId, questions }: { setId: string; questions: any[] }) {
   const [avatars, setAvatars] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
@@ -860,35 +861,27 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
   const [idx, setIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
+  const [me, setMe] = useState<string | null>(null);
+  const [showPickMe, setShowPickMe] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        // Load the set first to get groupIds
         const setData = await apiJson<any>(`/api/sets/${setId}`);
         let setGroupIds: string[] = [];
         try {
           const raw = (setData as any).groupIds;
-          if (raw) {
-            setGroupIds = Array.isArray(raw) ? raw : JSON.parse(raw);
-          }
+          if (raw) setGroupIds = Array.isArray(raw) ? raw : JSON.parse(raw);
         } catch {}
 
-        // Load all avatars and groups
         const av = await apiJson<{ avatars: any[] }>("/api/avatars");
         const gr = await apiJson<{ groups: any[] }>("/api/groups");
 
-        // Filter avatars: if the set has groupIds, only show avatars in those groups.
-        // Otherwise (no groups selected), show all avatars.
         let filteredAvatars = av.avatars;
         let filteredGroups = gr.groups;
         if (setGroupIds.length > 0) {
-          filteredAvatars = av.avatars.filter((a: any) =>
-            setGroupIds.includes(a.groupId)
-          );
-          filteredGroups = gr.groups.filter((g: any) =>
-            setGroupIds.includes(g.id)
-          );
+          filteredAvatars = av.avatars.filter((a: any) => setGroupIds.includes(a.groupId));
+          filteredGroups = gr.groups.filter((g: any) => setGroupIds.includes(g.id));
         }
         setAvatars(filteredAvatars);
         setGroups(filteredGroups);
@@ -897,6 +890,18 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
           `/api/vote?setId=${setId}`
         );
         setAnswers(pr.answers || {});
+
+        // Check if user already has selectedAvatarId
+        try {
+          const profile = await apiJson<any>("/api/profile");
+          if (profile.selectedAvatarId) {
+            setMe(profile.selectedAvatarId);
+          } else {
+            setShowPickMe(true);
+          }
+        } catch {
+          setShowPickMe(true);
+        }
       } catch (e: any) {
         toast.error(e.message);
       } finally {
@@ -905,10 +910,23 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
     })();
   }, [setId]);
 
+  const pickMe = async (avatarId: string) => {
+    setMe(avatarId);
+    setShowPickMe(false);
+    try {
+      await apiJson("/api/profile", {
+        method: "PUT",
+        body: JSON.stringify({ selectedAvatarId: avatarId }),
+      });
+    } catch (e: any) {
+      console.error("[test] failed to save selectedAvatarId:", e);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin" />
+        <Loader2 className="w-6 h-6 animate-spin text-brand-lime" />
       </div>
     );
   }
@@ -917,6 +935,53 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
     return (
       <div className="text-center py-12 text-sm text-muted-foreground">
         Avval "Avatari" bo'limida odamlar qo'shing.
+      </div>
+    );
+  }
+
+  // Step 1: "SEN KIMSAN?"
+  if (showPickMe || !me) {
+    return (
+      <div className="fade-in">
+        <div className="text-center mb-6">
+          <h1 className="brand text-5xl sm:text-6xl leading-none">SEN KIMSAN?</h1>
+          <p className="text-muted-foreground mt-2">
+            O'zingni tanla. {questions.length} ta savol — o'z guruhingdan tanlaysan, boshqa guruhdan ixtiyoriy 😈
+          </p>
+        </div>
+        {groups.map((g) => {
+          const ga = avatars.filter((a) => a.group?.color === g.color || a.groupId === g.id);
+          return (
+            <div key={g.id} className="group-block mb-4 p-3 rounded-2xl border border-border bg-white/2">
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`gtag gtag-${g.color}`}>{g.color} GURUH</span>
+                <span className="text-muted-foreground text-xs">{ga.length} kishi</span>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-3">
+                {ga.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => pickMe(a.id)}
+                    className="member-card w-full flex flex-col items-center gap-1 p-2"
+                  >
+                    <div className="w-full aspect-[3/4] rounded-lg overflow-hidden bg-secondary flex items-center justify-center">
+                      {a.photoUrl ? (
+                        <img src={a.photoUrl} alt={a.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-xl font-bold text-muted-foreground">
+                          {a.name?.[0] || "?"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs font-bold uppercase text-center truncate w-full">
+                      {a.shortName || a.name}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -952,6 +1017,8 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
 
   const q = questions[idx];
   const cur = answers[q.id] || {};
+  const meAvatar = avatars.find((a) => a.id === me);
+  const myGroup = meAvatar?.group?.color || meAvatar?.groupId || "A";
 
   const pick = async (groupId: string, avatarId: string | null) => {
     const newAnswers = { ...answers, [q.id]: { ...cur, [groupId]: avatarId } };
@@ -959,11 +1026,7 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
     try {
       await apiJson("/api/vote", {
         method: "POST",
-        body: JSON.stringify({
-          setId,
-          questionId: q.id,
-          targets: { [groupId]: avatarId },
-        }),
+        body: JSON.stringify({ setId, questionId: q.id, targets: { [groupId]: avatarId } }),
       });
     } catch (e: any) {
       toast.error(e.message);
@@ -975,16 +1038,75 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
     else setDone(true);
   };
 
+  const myGroupObj = groups.find((g) => g.color === myGroup || g.id === myGroup);
+  const otherGroups = groups.filter((g) => g !== myGroupObj);
+
+  const renderGroupGrid = (group: any, required: boolean) => {
+    const ga = avatars.filter((a) => a.group?.color === group.color || a.groupId === group.id);
+    const groupId = group.color || group.id;
+    return (
+      <div key={group.id} className="group-block mb-4 p-3 rounded-2xl border border-border bg-white/2">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className={`gtag gtag-${group.color}`}>{group.color} GURUH</span>
+            <span className="text-muted-foreground text-xs">
+              {required ? "majburiy" : "ixtiyoriy — bilmasang tashlab ket"}
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-3">
+          {ga.map((a) => {
+            const isMe = a.id === me;
+            const selected = cur[groupId] === a.id;
+            return (
+              <button
+                key={a.id}
+                onClick={() => !isMe && pick(groupId, a.id)}
+                className={`member-card w-full flex flex-col items-center gap-1 p-2 ${selected ? "selected" : ""} ${isMe ? "is-me" : ""}`}
+                disabled={isMe}
+              >
+                <div className="w-full aspect-[3/4] rounded-lg overflow-hidden bg-secondary flex items-center justify-center relative">
+                  {a.photoUrl ? (
+                    <img src={a.photoUrl} alt={a.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-xl font-bold text-muted-foreground">
+                      {a.name?.[0] || "?"}
+                    </div>
+                  )}
+                  {selected && (
+                    <div className="absolute top-1 right-1 w-6 h-6 rounded-full bg-brand-lime text-black flex items-center justify-center text-xs font-bold">
+                      ✓
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs font-bold uppercase text-center truncate w-full">
+                  {a.shortName || a.name}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4 fade-in">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span className="font-mono">{idx + 1} / {questions.length}</span>
-        <div className="flex-1 mx-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-brand-lime transition-all glow-lime"
-            style={{ width: `${(idx / questions.length) * 100}%` }}
-          />
-        </div>
+      <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
+        <span className="flex items-center gap-2">
+          {meAvatar?.photoUrl && (
+            <img src={meAvatar.photoUrl} className="w-7 h-7 rounded-full object-cover" alt="" />
+          )}
+          {meAvatar?.shortName || meAvatar?.name}
+          <span className={`gtag gtag-${myGroup}`}>{myGroup}</span>
+        </span>
+        <span>{idx + 1} / {questions.length}</span>
+      </div>
+      <div className="progress-bar mb-5 h-1.5 bg-white/5 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-brand-lime transition-all glow-lime"
+          style={{ width: `${(idx / questions.length) * 100}%` }}
+        />
       </div>
 
       <div className="q-card p-6 text-center space-y-3">
@@ -993,64 +1115,29 @@ function TestView({ setId, questions }: { setId: string; questions: any[] }) {
         <h3 className="font-semibold text-lg leading-tight max-w-md mx-auto">{q.text}</h3>
       </div>
 
-      {groups.length === 0 ? (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground text-center">
-            Guruhlar yo'q — barcha avatarlar bitta ro'yxatda
-          </p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {avatars.map((a) => (
-              <AvatarTile
-                key={a.id}
-                avatar={a}
-                selected={cur["default"] === a.id}
-                onClick={() => pick("default", a.id)}
-              />
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {groups.map((g) => {
-            const ga = avatars.filter((a) => a.groupId === g.id);
-            if (ga.length === 0) return null;
-            return (
-              <div key={g.id} className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className={`gtag gtag-${g.color || "A"}`}>{g.name || g.color} GURUH</span>
-                  <span className="text-[10px] text-muted-foreground">majburiy</span>
-                </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {ga.map((a) => (
-                    <AvatarTile
-                      key={a.id}
-                      avatar={a}
-                      selected={cur[g.color || g.id] === a.id}
-                      onClick={() => pick(g.color || g.id, a.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {myGroupObj && renderGroupGrid(myGroupObj, true)}
+      {otherGroups.map((g) => renderGroupGrid(g, false))}
 
       <div className="sticky bottom-20 flex items-center justify-between gap-2 pt-2 z-10">
         <button
-          onClick={() => setIdx(idx - 1)}
+          onClick={() => setIdx(Math.max(0, idx - 1))}
           disabled={idx === 0}
           className="btn-ghost disabled:opacity-30"
         >
           ← Oldingi
         </button>
-        <button onClick={next} className="btn-primary">
-          {idx === questions.length - 1 ? "Tugatish 🏁" : "Keyingi →"}
+        <button
+          onClick={next}
+          disabled={!cur[myGroup]}
+          className="btn-primary"
+        >
+          {idx === questions.length - 1 ? "🏁 Tugatish" : "Keyingi →"}
         </button>
       </div>
     </div>
   );
 }
+
 
 function AvatarTile({
   avatar,

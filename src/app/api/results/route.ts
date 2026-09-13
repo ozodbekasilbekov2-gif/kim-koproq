@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
           email: true,
           avatarUrl: true,
           telegramPhoto: true,
+          selectedAvatarId: true,
         },
       },
     },
@@ -61,13 +62,30 @@ export async function GET(req: NextRequest) {
     (byT[v.targetId] ||= []).push(v.voterId);
 
     // Build voter info (deduplicated)
+    // Use the voter's SELECTED AVATAR (not Telegram profile photo) if available
     if (!voterInfo[v.voterId]) {
-      const name =
-        [v.voter.firstName, v.voter.lastName].filter(Boolean).join(" ") ||
-        v.voter.telegramName ||
-        v.voter.email ||
-        "Foydalanuvchi";
-      const photo = v.voter.avatarUrl || v.voter.telegramPhoto || null;
+      // Check if the voter has selectedAvatarId — load that avatar's photo
+      let photo: string | null = null;
+      let name: string;
+
+      if (v.voter.selectedAvatarId) {
+        // Load the selected avatar to get its photo and name
+        const selectedAvatar = await db.avatar.findUnique({
+          where: { id: v.voter.selectedAvatarId },
+          select: { photoUrl: true, name: true, shortName: true },
+        });
+        if (selectedAvatar) {
+          photo = selectedAvatar.photoUrl || null;
+          name = selectedAvatar.shortName || selectedAvatar.name;
+        } else {
+          name = [v.voter.firstName, v.voter.lastName].filter(Boolean).join(" ") ||
+            v.voter.telegramName || v.voter.email || "Foydalanuvchi";
+        }
+      } else {
+        name = [v.voter.firstName, v.voter.lastName].filter(Boolean).join(" ") ||
+          v.voter.telegramName || v.voter.email || "Foydalanuvchi";
+        photo = v.voter.avatarUrl || v.voter.telegramPhoto || null;
+      }
       voterInfo[v.voterId] = { name, photo };
     }
   }

@@ -60,8 +60,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const set = await db.questionSet.findUnique({ where: { id } });
     if (!set) return NextResponse.json({ error: "Topilmadi" }, { status: 404 });
+
+    // Debug: log the IDs to diagnose ownership mismatch
+    console.log("[sets DELETE] user.id:", user.id, "set.ownerId:", set.ownerId, "match:", set.ownerId === user.id);
+
     if (set.ownerId !== user.id && user.role !== "admin") {
-      return NextResponse.json({ error: "Faqat egasi o'chira oladi" }, { status: 403 });
+      return NextResponse.json({ error: `Faqat egasi o'chira oladi (user: ${user.id}, owner: ${set.ownerId})` }, { status: 403 });
     }
     await db.questionSet.delete({ where: { id } });
     return NextResponse.json({ ok: true });
