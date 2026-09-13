@@ -12,9 +12,10 @@ const DEMO_SET_TITLE = "Kim ko'proq...? — 2AF1 so'rovi";
 // Also cleans up orphaned avatars/groups from deleted sets' owners if they have duplicates.
 export async function POST(req: NextRequest) {
   try {
-    // TEMPORARY: no auth required — this is a one-time cleanup operation.
-    // After deployment, call: curl -X POST https://kim-koproq.vercel.app/api/cleanup-demo-sets
-    // Then this endpoint can be removed or auth-protected again.
+    const user = await getCurrentUserDb(req);
+    if (!user) {
+      return NextResponse.json({ error: "Admin auth required" }, { status: 401 });
+    }
 
     // Find ALL demo sets across ALL users
     const allDemoSets = await db.questionSet.findMany({
