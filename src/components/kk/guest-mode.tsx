@@ -5,6 +5,7 @@ import { apiJson } from "@/lib/api-client";
 import { toast } from "sonner";
 import { Zap, ArrowLeft, Lock, Unlock } from "lucide-react";
 import { Loader2 } from "lucide-react";
+import { SharedResultsView } from "@/components/kk/shared-results";
 
 type GuestSet = {
   id: string;
@@ -307,11 +308,11 @@ export function GuestMode({
         )}
 
         {view === "results" && (
-          <GuestResultsView setId={setId} questions={questions} avatars={avatars} />
+          <SharedResultsView setId={setId} />
         )}
 
         {view === "people" && (
-          <GuestPeopleView setId={setId} questions={questions} avatars={avatars} />
+          <SharedResultsView setId={setId} />
         )}
       </main>
     </div>

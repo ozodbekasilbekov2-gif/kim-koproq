@@ -25,18 +25,11 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "asc" },
   });
 
-  // Load avatars from the SET'S OWNER only.
-  // Each user has their OWN 27 demo avatars, so we load from whoever owns
-  // this set — that's whose results we're showing.
-  // (Plus the current user if they're logged in and viewing someone else's set)
-  const ownerIds = new Set<string>();
-  ownerIds.add(set.ownerId); // the set's owner (has the questions + avatars)
-  if (user && user.id !== set.ownerId) {
-    ownerIds.add(user.id); // current user's own avatars (if viewing someone else's set)
-  }
-
+  // Load avatars from the SET'S OWNER ONLY.
+  // This ensures results are identical regardless of whether the viewer
+  // is logged in or anonymous — they always see the set owner's avatars.
   const avatars = await db.avatar.findMany({
-    where: { ownerId: { in: Array.from(ownerIds) } },
+    where: { ownerId: set.ownerId },
     include: { group: true },
   });
 

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import type { KKUser } from "@/app/page";
 import type { ActionMode } from "./app-shell";
+import { SharedResultsView } from "@/components/kk/shared-results";
 
 export type SetData = {
   id: string;
@@ -643,8 +644,8 @@ function SetDetailView({
       )}
 
       {view === "test" && <TestView setId={setId} questions={questions} />}
-      {view === "results" && <ResultsView setId={setId} />}
-      {view === "people" && <PeopleView setId={setId} />}
+      {view === "results" && <SharedResultsView setId={setId} />}
+      {view === "people" && <SharedResultsView setId={setId} />}
 
       {showShare && (
         <ShareDialog setId={setId} title={set.title} onClose={() => setShowShare(false)} />
