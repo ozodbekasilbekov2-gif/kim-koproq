@@ -1,23 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
-import { ensureUserDemoSet } from "@/lib/demo-seed";
 
 // List all public sets + sets owned by user
-// Also ensures the logged-in user has their OWN personal demo set.
+// READ ONLY — does NOT create demo data.
+// Demo data is created only on registration (POST /api/register) and
+// Telegram auth (POST /api/telegram/auth).
 export async function GET(req: NextRequest) {
   const user = await getCurrentUserDb(req);
-
-  // If the user is logged in, ensure they have their own personal demo set
-  // (27 avatars + 29 questions). This gives each user their own share link
-  // and their own results page.
-  if (user) {
-    try {
-      await ensureUserDemoSet(user.id);
-    } catch (e) {
-      console.error("[sets GET] user demo set creation failed:", e);
-    }
-  }
 
   const where = user
     ? { OR: [{ isPublic: true }, { ownerId: user.id }] }

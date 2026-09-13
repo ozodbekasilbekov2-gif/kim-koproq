@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
-import { ensureUserDemoSet } from "@/lib/demo-seed";
 
-// GET /api/avatars — returns avatars.
-// - If ?setId= is provided: loads avatars from that set's owner (for guest mode
-//   OR for logged-in users viewing someone else's set)
-// - If no setId and logged in: loads the current user's avatars
-// - If no setId and not logged in: returns empty
+// GET /api/avatars — READ ONLY, does NOT create demo data.
+// Demo data is created only on registration and Telegram auth.
 export async function GET(req: NextRequest) {
   const user = await getCurrentUserDb(req);
   const setId = req.nextUrl.searchParams.get("setId");
@@ -31,14 +27,7 @@ export async function GET(req: NextRequest) {
 
   if (!user) return NextResponse.json({ avatars: [] });
 
-  // Ensure the user has their personal demo avatars
-  try {
-    await ensureUserDemoSet(user.id);
-  } catch (e) {
-    console.error("[avatars GET] user demo set failed:", e);
-  }
-
-  // Load ONLY the current user's avatars
+  // Load ONLY the current user's avatars (READ ONLY — no demo creation)
   const avatars = await db.avatar.findMany({
     where: { ownerId: user.id },
     include: { group: true },

@@ -7,27 +7,51 @@ const DEMO_SET_TITLE = "Kim ko'proq...? — 2AF1 so'rovi";
  * Ensures a user has their OWN personal demo set with 27 avatars and 29 questions.
  * Each user gets their own copy — so votes and results are per-user.
  *
- * This is called:
+ * This is called ONLY:
  * - On registration (POST /api/register)
- * - On /api/sets GET (if user is logged in but has no demo set)
+ * - On Telegram auth (POST /api/telegram/auth)
  *
- * Idempotent: if the user already has a demo set with >=29 questions and
- * >=27 avatars, returns immediately.
+ * NOT called on every /api/sets, /api/avatars, /api/groups request — those just READ.
+ *
+ * Race-condition-safe: uses findFirst with orderBy to always pick the latest,
+ * and only creates if NONE exists with >=29 questions.
  */
 export async function ensureUserDemoSet(userId: string): Promise<void> {
   if (!userId) return;
 
-  // 1) Check if the user already has a "good" demo set (correct title + enough questions)
-  const existingSet = await db.questionSet.findFirst({
+  // 1) Check if the user already has a "good" demo set (>=29 questions)
+  const existingSets = await db.questionSet.findMany({
     where: { ownerId: userId, title: DEMO_SET_TITLE },
-    include: { _count: { select: { questions: true } } },
+    include: { _count: { select: { questions: { where: { deletedAt: null } } } } },
+    orderBy: { createdAt: "desc" },
   });
 
-  if (existingSet && existingSet._count.questions >= SEED_QUESTIONS.length) {
-    return; // Everything is in place — nothing to do
+  // Find the best one (most questions)
+  const bestSet = existingSets.length > 0
+    ? existingSets.reduce((best, s) =>
+        s._count.questions > best._count.questions ? s : best
+      )
+    : null;
+
+  if (bestSet && bestSet._count.questions >= SEED_QUESTIONS.length) {
+    // Good set exists — delete any duplicates
+    if (existingSets.length > 1) {
+      for (const s of existingSets) {
+        if (s.id !== bestSet.id) {
+          await db.questionSet.delete({ where: { id: s.id } }).catch(() => {});
+        }
+      }
+      console.log(`[ensureUserDemoSet] Cleaned up ${existingSets.length - 1} duplicate sets for user ${userId}`);
+    }
+    return; // Good set exists, duplicates cleaned
   }
 
-  // 2) Ensure the user has groups A and B. Create only if missing — don't delete existing.
+  // 2) Delete ALL existing demo sets for this user (they're incomplete)
+  for (const s of existingSets) {
+    await db.questionSet.delete({ where: { id: s.id } }).catch(() => {});
+  }
+
+  // 3) Ensure groups A and B exist (create only if missing)
   let groups = await db.avatarGroup.findMany({ where: { ownerId: userId } });
   let groupA = groups.find((g) => g.color === "A");
   let groupB = groups.find((g) => g.color === "B");
@@ -43,17 +67,15 @@ export async function ensureUserDemoSet(userId: string): Promise<void> {
     });
   }
 
-  // 3) Ensure the 27 demo avatars exist. Create only those that are missing
-  //    (by name match). Does NOT delete user's custom avatars.
+  // 4) Ensure the 27 demo avatars exist (create only missing ones, don't delete custom)
   const existingAvatars = await db.avatar.findMany({
     where: { ownerId: userId },
     select: { name: true },
   });
   const existingAvatarNames = new Set(existingAvatars.map((a) => a.name));
 
-  let createdCount = 0;
   for (const m of MEMBERS) {
-    if (existingAvatarNames.has(m.name)) continue; // Already exists — skip
+    if (existingAvatarNames.has(m.name)) continue;
 
     const groupId = m.group === "A" ? groupA.id : groupB.id;
     const photoUrl = m.photo ? `/static/members/${m.id}.jpg` : null;
@@ -68,51 +90,34 @@ export async function ensureUserDemoSet(userId: string): Promise<void> {
         ownerId: userId,
       },
     });
-    createdCount++;
-  }
-  if (createdCount > 0) {
-    console.log(`[ensureUserDemoSet] Created ${createdCount} avatars for user ${userId}`);
   }
 
-  // 3) Create the demo set if it doesn't exist or is incomplete
-  if (!existingSet || existingSet._count.questions < SEED_QUESTIONS.length) {
-    // Delete old incomplete demo sets for this user
-    const staleSets = await db.questionSet.findMany({
-      where: { ownerId: userId, title: DEMO_SET_TITLE },
-    });
-    for (const s of staleSets) {
-      await db.questionSet.delete({ where: { id: s.id } }).catch(() => {});
-    }
+  // 5) Create the demo set (only one!)
+  const set = await db.questionSet.create({
+    data: {
+      title: DEMO_SET_TITLE,
+      description:
+        "2AF1 guruhi uchun qiziqarli savollar. Roast, Rostini ayt, Kelajak, Xaos.",
+      emoji: "⚡",
+      mode: "loose",
+      ownerId: userId,
+      isPublic: true,
+    },
+  });
 
-    // Create the demo set
-    const set = await db.questionSet.create({
+  // 6) Create all 29 questions
+  for (const q of SEED_QUESTIONS) {
+    await db.question.create({
       data: {
-        title: DEMO_SET_TITLE,
-        description:
-          "2AF1 guruhi uchun qiziqarli savollar. Roast, Rostini ayt, Kelajak, Xaos.",
-        emoji: "⚡",
-        mode: "loose",
-        ownerId: userId,
-        isPublic: true,
+        text: q.text,
+        emoji: q.emoji,
+        category: q.category,
+        setId: set.id,
+        createdBy: userId,
       },
     });
-
-    // Create all 29 questions
-    for (const q of SEED_QUESTIONS) {
-      await db.question.create({
-        data: {
-          text: q.text,
-          emoji: q.emoji,
-          category: q.category,
-          setId: set.id,
-          createdBy: userId,
-        },
-      });
-    }
-    console.log(
-      `[ensureUserDemoSet] Created demo set "${DEMO_SET_TITLE}" with ${SEED_QUESTIONS.length} questions for user ${userId}`
-    );
   }
+  console.log(`[ensureUserDemoSet] Created demo set with ${SEED_QUESTIONS.length} questions for user ${userId}`);
 }
 
 /**

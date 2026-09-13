@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
-import { ensureUserDemoSet } from "@/lib/demo-seed";
 
-// GET /api/groups — returns groups.
-// - If ?setId= is provided: loads groups from that set's owner (for guest mode
-//   OR for logged-in users viewing someone else's set)
-// - If no setId and logged in: loads the current user's groups
-// - If no setId and not logged in: returns empty
+// GET /api/groups — READ ONLY, does NOT create demo data.
 export async function GET(req: NextRequest) {
   const user = await getCurrentUserDb(req);
   const setId = req.nextUrl.searchParams.get("setId");
@@ -30,13 +25,7 @@ export async function GET(req: NextRequest) {
 
   if (!user) return NextResponse.json({ groups: [] });
 
-  // Ensure the user has their personal demo groups
-  try {
-    await ensureUserDemoSet(user.id);
-  } catch (e) {
-    console.error("[groups GET] user demo set failed:", e);
-  }
-
+  // Load ONLY the current user's groups (READ ONLY — no demo creation)
   const groups = await db.avatarGroup.findMany({
     where: { ownerId: user.id },
     include: { _count: { select: { avatars: true } } },

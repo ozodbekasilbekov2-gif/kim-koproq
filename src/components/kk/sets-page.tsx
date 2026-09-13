@@ -149,15 +149,12 @@ export function SetsPage({
         <div>
           <h3 className="brand text-2xl">SETLAR YO'Q</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Birinchi savol setingizni yarating yoki 2AF1 demo ma'lumotlarni yuklang
+            Birinchi savol setingizni yarating — demo set avtomatik yaratiladi
           </p>
         </div>
         <div className="flex gap-2 justify-center">
           <button onClick={() => setShowCreate(true)} className="btn-primary">
             <Plus className="w-4 h-4 mr-1 inline" /> Yaratish
-          </button>
-          <button onClick={() => loadDemoData(loadSets)} className="btn-ghost">
-            ⚡ 2AF1 demo yuklash
           </button>
         </div>
       </div>
