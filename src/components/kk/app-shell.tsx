@@ -167,7 +167,12 @@ export function AppShell({
     // Step 3: Clear local storage regardless of API result
     localStorage.removeItem("kk_session");
     localStorage.removeItem("kk_tg_token");
-    localStorage.removeItem("kk_guest_me_*");
+    // Clear all kk_guest_me_* keys (localStorage.removeItem doesn't support wildcards)
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("kk_guest_me_") || key.startsWith("kk_guest_answers_")) {
+        localStorage.removeItem(key);
+      }
+    });
 
     // Step 4: Call parent's onLogout to reset state
     onLogout();

@@ -25,6 +25,8 @@ model User {
   firstName     String?
   lastName      String?
   avatarUrl     String?
+  // Which avatar represents "me" — used for self-vote skip
+  selectedAvatarId String?
   // Telegram link (one user may have one TG account, and vice versa)
   telegramId    String?   @unique
   telegramName  String?

@@ -995,6 +995,7 @@ function AvatarTile({
 }) {
   // Original Kim Ko'proq vibe: member card with photo or MAFIA badge for those without photo
   const hasPhoto = !!avatar.photoUrl;
+  const hasIcon = !!avatar.iconName;
   return (
     <button
       onClick={onClick}
@@ -1003,6 +1004,10 @@ function AvatarTile({
       <div className="w-12 h-12 rounded-lg overflow-hidden bg-secondary flex items-center justify-center relative">
         {hasPhoto ? (
           <img src={avatar.photoUrl} alt={avatar.name} className="w-full h-full object-cover" />
+        ) : hasIcon ? (
+          <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+            <IconFallback iconName={avatar.iconName} className="w-6 h-6 text-muted-foreground" />
+          </div>
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-xl font-bold text-muted-foreground">
             {avatar.name?.[0] || "?"}
@@ -1024,6 +1029,26 @@ function AvatarTile({
       )}
     </button>
   );
+}
+
+// Icon fallback: maps iconName to Lucide icon
+function IconFallback({ iconName, className }: { iconName: string; className?: string }) {
+  // Map common professional icon names to Lucide icons
+  const iconMap: Record<string, string> = {
+    "user": "👤",
+    "user-tie": "👔",
+    "user-graduate": "🎓",
+    "user-nurse": "⚕️",
+    "user-cog": "⚙️",
+    "user-astronaut": "🚀",
+    "user-check": "✓",
+    "user-secret": "🕵️",
+    "palette": "🎨",
+    "wrench": "🔧",
+    "camera": "📷",
+  };
+  const emoji = iconMap[iconName] || "👤";
+  return <span className={className}>{emoji}</span>;
 }
 
 function ResultsView({ setId }: { setId: string }) {

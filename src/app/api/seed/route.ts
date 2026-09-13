@@ -5,7 +5,7 @@ import { MEMBERS, SEED_QUESTIONS } from "@/lib/original-data";
 
 // Auto-seed: ensures the original 2AF1 demo set exists for every visitor.
 // Creates a system "demo" user (no password, no telegramId) that owns the set,
-// plus two avatar groups (A / B) and all 27 original members + 32 questions.
+// plus two avatar groups (A / B) and all 27 original members + 29 questions.
 // Idempotent — safe to call on every request; only seeds if missing.
 
 const DEMO_USER_KEY = "2af1-demo-user";
@@ -17,10 +17,10 @@ async function ensureDemoSeed() {
     where: { title: { startsWith: "Kim ko'proq...? — 2AF1" } },
     include: { _count: { select: { questions: true } } },
   });
-  if (existing && existing._count.questions >= 32) {
+  if (existing && existing._count.questions >= 29) {
     return existing;
   }
-  if (existing && existing._count.questions < 32) {
+  if (existing && existing._count.questions < 29) {
     // Demo set exists but is incomplete — delete and reseed
     await db.questionSet.delete({ where: { id: existing.id } });
   }
@@ -78,7 +78,7 @@ async function ensureDemoSeed() {
     },
   });
 
-  // Create all 32 questions
+  // Create all 29 questions
   for (const q of SEED_QUESTIONS) {
     await db.question.create({
       data: {

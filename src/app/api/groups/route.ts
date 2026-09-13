@@ -3,17 +3,17 @@ import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
 import { ensureUserDemoSet } from "@/lib/demo-seed";
 
-// GET /api/groups — returns the current user's groups.
-// Each user has their OWN groups (A guruh, B guruh) with their OWN avatars.
-//
-// Optional query param: ?setId=xxx — if provided (guest mode), loads groups
-// from that set's owner instead.
+// GET /api/groups — returns groups.
+// - If ?setId= is provided: loads groups from that set's owner (for guest mode
+//   OR for logged-in users viewing someone else's set)
+// - If no setId and logged in: loads the current user's groups
+// - If no setId and not logged in: returns empty
 export async function GET(req: NextRequest) {
   const user = await getCurrentUserDb(req);
-
-  // If ?setId= is provided (guest mode), load groups from that set's owner
   const setId = req.nextUrl.searchParams.get("setId");
-  if (setId && !user) {
+
+  // If ?setId= is provided, load groups from that set's owner
+  if (setId) {
     const set = await db.questionSet.findUnique({
       where: { id: setId },
       select: { ownerId: true },

@@ -12,7 +12,9 @@ function base64UrlDecode(s: string): string {
 
 export async function signJwt(payload: Record<string, any>): Promise<string> {
   const header = base64UrlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const body = base64UrlEncode(JSON.stringify({ ...payload, iat: Date.now() }));
+  // Add expiry: 7 days
+  const exp = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+  const body = base64UrlEncode(JSON.stringify({ ...payload, iat: Date.now(), exp }));
   const data = `${header}.${body}`;
   const sig = createHmac("sha256", SECRET).update(data).digest("base64url");
   return `${data}.${sig}`;
@@ -28,7 +30,13 @@ export async function verifyJwt<T = any>(token: string): Promise<T | null> {
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   try {
-    return JSON.parse(base64UrlDecode(body));
+    const payload = JSON.parse(base64UrlDecode(body));
+    // Check expiry
+    if (payload.exp && Date.now() / 1000 > payload.exp) {
+      console.warn("[jwt] token expired");
+      return null;
+    }
+    return payload;
   } catch {
     return null;
   }

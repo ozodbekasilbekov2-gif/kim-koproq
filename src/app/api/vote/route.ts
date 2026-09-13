@@ -28,8 +28,8 @@ export async function POST(req: NextRequest) {
       }
       const avatar = await db.avatar.findUnique({ where: { id: avatarId as string } });
       if (!avatar) return NextResponse.json({ error: `Avatar topilmadi: ${avatarId}` }, { status: 400 });
-      // Self-vote skip
-      if (avatar.id === user.id) continue;
+      // Self-vote skip — compare against the user's selected avatar (selectedAvatarId)
+      if (user.selectedAvatarId && avatar.id === user.selectedAvatarId) continue;
       await db.vote.upsert({
         where: {
           voterId_questionId_groupId: {

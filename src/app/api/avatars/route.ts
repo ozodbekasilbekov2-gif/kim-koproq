@@ -3,18 +3,18 @@ import { db } from "@/lib/db";
 import { getCurrentUserDb } from "@/lib/session";
 import { ensureUserDemoSet } from "@/lib/demo-seed";
 
-// GET /api/avatars — returns the current user's avatars.
-// Each user has their OWN 27 demo avatars (created on registration/login).
-// This ensures each user's test results are separate.
-//
-// Optional query param: ?setId=xxx — if provided, loads avatars from that
-// set's owner instead (useful when a guest opens a shared set).
+// GET /api/avatars — returns avatars.
+// - If ?setId= is provided: loads avatars from that set's owner (for guest mode
+//   OR for logged-in users viewing someone else's set)
+// - If no setId and logged in: loads the current user's avatars
+// - If no setId and not logged in: returns empty
 export async function GET(req: NextRequest) {
   const user = await getCurrentUserDb(req);
-
-  // If ?setId= is provided (guest mode), load avatars from that set's owner
   const setId = req.nextUrl.searchParams.get("setId");
-  if (setId && !user) {
+
+  // If ?setId= is provided, load avatars from that set's owner
+  // (works for both guests AND logged-in users viewing a shared set)
+  if (setId) {
     const set = await db.questionSet.findUnique({
       where: { id: setId },
       select: { ownerId: true },
