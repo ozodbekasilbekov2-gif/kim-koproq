@@ -6,8 +6,8 @@ const WINDOW_MS = 60_000; // 1 minute
 const MAX_REQUESTS: Record<string, number> = {
   register: 3,       // 3 registrations per minute per IP
   "telegram-auth": 5, // 5 Telegram logins per minute
-  vote: 30,           // 30 votes per minute
-  "guest-vote": 30,   // 30 guest votes per minute
+  vote: 60,           // 60 votes per minute (test has 29 questions, each click = 1 vote)
+  "guest-vote": 60,   // 60 guest votes per minute
 };
 
 const store = new Map<string, { count: number; resetAt: number }>();

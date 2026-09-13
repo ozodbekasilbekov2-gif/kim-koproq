@@ -61,34 +61,38 @@ export async function POST(req: NextRequest) {
 
       // Verify the avatar exists
       const avatar = await db.avatar.findUnique({ where: { id: avatarId as string } });
-      if (!avatar) continue;
-
-      // Skip self-votes (if guest selected an avatar as "me", they can't vote for themselves)
-      // We check via the guest's selected avatar stored in localStorage
-      // For simplicity, we just save the vote — self-vote check happens on the client
+      if (!avatar) {
+        console.warn(`[guest-vote] Avatar not found: ${avatarId}`);
+        continue; // Skip silently — don't fail the whole request
+      }
 
       // Upsert the vote
-      await db.guestVote.upsert({
-        where: {
-          guestToken_questionId_groupId: {
+      try {
+        await db.guestVote.upsert({
+          where: {
+            guestToken_questionId_groupId: {
+              guestToken,
+              questionId,
+              groupId,
+            },
+          },
+          create: {
             guestToken,
+            guestName: guestName || null,
             questionId,
+            setId,
+            targetId: avatarId as string,
             groupId,
           },
-        },
-        create: {
-          guestToken,
-          guestName: guestName || null,
-          questionId,
-          setId,
-          targetId: avatarId as string,
-          groupId,
-        },
-        update: {
-          targetId: avatarId as string,
-          guestName: guestName || null,
-        },
-      });
+          update: {
+            targetId: avatarId as string,
+            guestName: guestName || null,
+          },
+        });
+      } catch (upsertErr: any) {
+        console.error("[guest-vote] upsert failed:", upsertErr?.message || upsertErr);
+        // Don't fail the whole request — just log the error
+      }
     }
 
     return NextResponse.json({ ok: true });

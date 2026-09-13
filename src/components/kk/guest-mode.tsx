@@ -171,7 +171,8 @@ export function GuestMode({
       return next;
     });
 
-    // Send vote to server (async, non-blocking)
+    // If removing vote (avatarId is null), send DELETE to server
+    // If adding vote, send POST to server
     try {
       const guestToken = localStorage.getItem("kk_guest_token");
       if (!guestToken) return;
@@ -190,9 +191,16 @@ export function GuestMode({
           targets: { [groupId]: avatarId },
         }),
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error("[guest] vote save failed:", e);
-      toast.error("Ovoz saqlanmadi — internet aloqasini tekshiring");
+      // Show the REAL error message from the server, not a generic one
+      const errMsg = e?.message || "Noma'lum xato";
+      // Don't show toast for rate limit errors (too noisy) — just log
+      if (errMsg.includes("Juda ko'p so'rov") || errMsg.includes("429")) {
+        console.warn("[guest] rate limited, vote will be retried on next action");
+      } else {
+        toast.error(`Ovoz saqlanmadi: ${errMsg}`);
+      }
     }
   };
 
