@@ -484,6 +484,8 @@ function SetDetailView({
   const [editingQ, setEditingQ] = useState<any | null>(null);
   const [view, setView] = useState<"questions" | "test" | "results" | "people">("questions");
   const [showShare, setShowShare] = useState(false);
+  const [showEditSet, setShowEditSet] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Listen for "go to results" event from TestView's completion screen
   useEffect(() => {
@@ -525,6 +527,16 @@ function SetDetailView({
   const isOwner = set.ownerId === user.id;
   const canEdit = isOwner || set.mode === "loose";
 
+  const deleteSet = async () => {
+    try {
+      await apiJson(`/api/sets/${setId}`, { method: "DELETE" });
+      toast.success("Set o'chirildi");
+      onBack();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   return (
     <div className="space-y-4 fade-in">
       <div className="flex items-center gap-3">
@@ -540,6 +552,7 @@ function SetDetailView({
             )}
           </div>
         </div>
+        {/* Share button — visible if set is public */}
         {set.isPublic && (
           <button
             onClick={() => setShowShare(true)}
@@ -547,6 +560,26 @@ function SetDetailView({
             title="Setni ulashish"
           >
             <Share2 className="w-4 h-4" /> Ulashish
+          </button>
+        )}
+        {/* Edit button — only for owner */}
+        {isOwner && (
+          <button
+            onClick={() => setShowEditSet(true)}
+            className="btn-ghost text-xs flex items-center gap-1"
+            title="Setni tahrirlash"
+          >
+            ✏️ Tahrirlash
+          </button>
+        )}
+        {/* Delete button — only for owner */}
+        {isOwner && (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="btn-danger text-xs flex items-center gap-1"
+            title="Setni o'chirish"
+          >
+            🗑 O'chirish
           </button>
         )}
         <span
@@ -668,6 +701,43 @@ function SetDetailView({
             await load();
           }}
         />
+      )}
+
+      {/* Edit set dialog */}
+      {showEditSet && (
+        <SetDialog
+          mode="edit"
+          setId={setId}
+          initialData={set}
+          onClose={() => setShowEditSet(false)}
+          onSaved={async () => {
+            setShowEditSet(false);
+            await load();
+          }}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {showDeleteConfirm && (
+        <Dialog open onOpenChange={(o) => !o && setShowDeleteConfirm(false)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>🗑 Setni o'chirish</DialogTitle>
+              <DialogDescription>
+                "{set.title}" setini o'chirmoqchimisiz? Bu amalni qaytarib bo'lmaydi —
+                barcha savollar, ovozlar va natijalar o'chiriladi.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>
+                Bekor qilish
+              </Button>
+              <Button variant="destructive" onClick={deleteSet}>
+                🗑 Ha, o'chirish
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
