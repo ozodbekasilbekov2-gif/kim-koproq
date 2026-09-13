@@ -8,6 +8,7 @@ import {
   chats,
   contactReveals,
   messages,
+  telegramChatMessages,
   telegramUsers,
   userSettings,
   userTags,
@@ -93,6 +94,35 @@ export async function getTelegramUser(telegramUserId: string) {
   if (!db) return undefined;
   const result = await db.select().from(telegramUsers).where(eq(telegramUsers.telegramUserId, telegramUserId)).limit(1);
   return result[0];
+}
+
+export async function trackTelegramMessage(input: {
+  telegramChatId: number | string;
+  telegramMessageId: number;
+  direction: "incoming" | "outgoing";
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(telegramChatMessages).values({
+    telegramChatId: String(input.telegramChatId),
+    telegramMessageId: input.telegramMessageId,
+    direction: input.direction,
+  }).onDuplicateKeyUpdate({ set: { direction: input.direction } });
+}
+
+export async function getTrackedTelegramMessageIds(telegramChatId: number | string) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ messageId: telegramChatMessages.telegramMessageId })
+    .from(telegramChatMessages)
+    .where(eq(telegramChatMessages.telegramChatId, String(telegramChatId)));
+  return rows.map(row => row.messageId);
+}
+
+export async function clearTrackedTelegramMessages(telegramChatId: number | string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(telegramChatMessages).where(eq(telegramChatMessages.telegramChatId, String(telegramChatId)));
 }
 
 export async function setFlowState(telegramUserId: string, flowState: string | null) {

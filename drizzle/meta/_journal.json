@@ -22,6 +22,13 @@
       "when": 1789032501951,
       "tag": "0002_nasty_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1789288494605,
+      "tag": "0003_shiny_spacker_dave",
+      "breakpoints": true
     }
   ]
 }

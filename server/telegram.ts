@@ -1,13 +1,17 @@
 import type { Express, Request, Response } from "express";
 import { ENV } from "./_core/env";
 import {
+  clearTrackedTelegramMessages,
+  createChatBetween,
   createOrJoinChat,
+  findTagMatch,
   getActiveChatForUser,
   getChatMessages,
   getFlowState,
   getHistoryForUser,
   getOtherMember,
   getTelegramUser,
+  getTrackedTelegramMessageIds,
   getUserTags,
   removeChatForUser,
   revealContact,
@@ -15,6 +19,7 @@ import {
   saveUserTag,
   setChatName,
   setFlowState,
+  trackTelegramMessage,
   trashUserTag,
   upsertTelegramUser,
   updateTelegramProfile,
@@ -52,7 +57,7 @@ type InlineKeyboardMarkup = {
 };
 
 type ReplyKeyboardMarkup = {
-  keyboard: Array<Array<{ text: string }>>;
+  keyboard: Array<Array<{ text: string; web_app?: { url: string } }>>;
   resize_keyboard: true;
   is_persistent?: boolean;
 };
@@ -61,6 +66,8 @@ const MAIN_MENU: ReplyKeyboardMarkup = {
   keyboard: [
     [{ text: "💬 Пообщаться" }, { text: "🗂 История чатов" }],
     [{ text: "👤 Профиль" }, { text: "🏷 Мои теги" }],
+    [{ text: "🚀 Открыть Mini App", web_app: { url: "https://anonchat-vgpzqdrg.manus.space/" } }],
+    [{ text: "↩️ Отмена" }, { text: "❔ Помощь" }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -71,6 +78,8 @@ const CHAT_MENU: ReplyKeyboardMarkup = {
     [{ text: "🤝 Представить контакты" }, { text: "⏭ Новый собеседник" }],
     [{ text: "🗂 История чатов" }, { text: "👤 Профиль" }],
     [{ text: "🏷 Мои теги" }],
+    [{ text: "🚀 Открыть Mini App", web_app: { url: "https://anonchat-vgpzqdrg.manus.space/" } }],
+    [{ text: "↩️ Отмена" }, { text: "❔ Помощь" }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -118,6 +127,12 @@ export function isTelegramWebhookAuthorized(
   return received === expectedSecret;
 }
 
+export function chunkTelegramMessageIds(ids: number[], chunkSize = 100) {
+  const chunks: number[][] = [];
+  for (let index = 0; index < ids.length; index += chunkSize) chunks.push(ids.slice(index, index + chunkSize));
+  return chunks;
+}
+
 async function telegramApi<T>(method: string, payload: Record<string, unknown>): Promise<T> {
   if (!ENV.telegramBotToken) throw new Error("TELEGRAM_BOT_TOKEN is not configured");
   const response = await fetch(`https://api.telegram.org/bot${ENV.telegramBotToken}/${method}`, {
@@ -135,13 +150,19 @@ async function sendMessage(
   text: string,
   options: { replyMarkup?: ReplyKeyboardMarkup | InlineKeyboardMarkup; parseMode?: "HTML" } = {}
 ) {
-  return telegramApi<TelegramMessage>("sendMessage", {
+  const sent = await telegramApi<TelegramMessage>("sendMessage", {
     chat_id: chatId,
     text,
     parse_mode: options.parseMode,
     reply_markup: options.replyMarkup,
     disable_web_page_preview: true,
   });
+  try {
+    await trackTelegramMessage({ telegramChatId: chatId, telegramMessageId: sent.message_id, direction: "outgoing" });
+  } catch (error) {
+    console.warn("[Telegram] Could not track outgoing message", error);
+  }
+  return sent;
 }
 
 export async function sendTelegramText(
@@ -161,6 +182,28 @@ async function deleteMessage(chatId: number, messageId: number) {
     await telegramApi("deleteMessage", { chat_id: chatId, message_id: messageId });
   } catch {
     // Deleting is best-effort: Telegram restricts deletion by message age and ownership.
+  }
+}
+
+async function clearTelegramChat(chatId: number, extraMessageIds: number[] = []) {
+  let trackedIds: number[] = [];
+  try {
+    trackedIds = await getTrackedTelegramMessageIds(chatId);
+  } catch (error) {
+    console.warn("[Telegram] Could not load tracked messages", error);
+  }
+  const ids = Array.from(new Set([...trackedIds, ...extraMessageIds]));
+  for (const chunk of chunkTelegramMessageIds(ids)) {
+    try {
+      await telegramApi("deleteMessages", { chat_id: chatId, message_ids: chunk });
+    } catch {
+      for (const messageId of chunk) await deleteMessage(chatId, messageId);
+    }
+  }
+  try {
+    await clearTrackedTelegramMessages(chatId);
+  } catch (error) {
+    console.warn("[Telegram] Could not clear tracked message rows", error);
   }
 }
 
@@ -282,11 +325,12 @@ async function showChatHistory(chatId: number, telegramId: string, selectedChatI
 async function startSearching(chatId: number, telegramId: string) {
   const active = await getActiveChatForUser(telegramId);
   if (active) await removeChatForUser(active.id, telegramId);
-  const result = await createOrJoinChat(telegramId);
-  if (result.status === "unavailable") {
-    await sendMessage(chatId, "Сервис временно недоступен. Попробуйте ещё раз через минуту.", {
-      replyMarkup: MAIN_MENU,
-    });
+  const tagCandidate = await findTagMatch(telegramId);
+  const result = tagCandidate
+    ? { status: "active" as const, chat: await createChatBetween(telegramId, tagCandidate.telegramUserId) }
+    : await createOrJoinChat(telegramId);
+  if (!result.chat) {
+    await sendMessage(chatId, "Сервис временно недоступен. Попробуйте ещё раз через минуту.", { replyMarkup: MAIN_MENU });
     return;
   }
   if (result.status === "waiting") {
@@ -346,11 +390,21 @@ async function handleTextMessage(message: TelegramMessage) {
   const chatId = message.chat.id;
   const text = normalizeText(message.text);
 
+  try {
+    await trackTelegramMessage({ telegramChatId: chatId, telegramMessageId: message.message_id, direction: "incoming" });
+  } catch (error) {
+    console.warn("[Telegram] Could not track incoming message", error);
+  }
+
   await upsertTelegramUser({
     telegramUserId: telegramId,
     username: user.username,
     firstName: user.first_name,
   });
+
+  const flowState = await getFlowState(telegramId);
+  const isChatMessage = flowState?.startsWith("chat:") && !text.startsWith("/") && !text.includes("Пообщаться") && !text.includes("История") && !text.includes("Профиль") && !text.includes("теги") && !text.includes("контакты") && !text.includes("собеседник");
+  if (!isChatMessage) await clearTelegramChat(chatId, [message.message_id]);
 
   if (text === "/start") {
     await setFlowState(telegramId, null);
@@ -361,6 +415,15 @@ async function handleTextMessage(message: TelegramMessage) {
     await sendMessage(chatId, "Анонимность: собеседник не получает ваш Telegram ID, имя или username, пока вы сами не нажмёте «Представить контакты». Сервер видит Telegram ID только для доставки сообщений. Не отправляйте пароли, адреса и другие чувствительные данные.", {
       replyMarkup: MAIN_MENU,
     });
+    return;
+  }
+  if (text === "↩️ Отмена" || text === "/cancel") {
+    await setFlowState(telegramId, null);
+    await showMainMenu(chatId);
+    return;
+  }
+  if (text === "❔ Помощь" || text === "/help") {
+    await sendMessage(chatId, "<b>Как пользоваться</b>\n\n💬 Пообщаться — найти нового анонимного собеседника.\n🗂 История чатов — открыть сохранённые диалоги.\n👤 Профиль — изменить имя, иконку и цвет.\n🏷 Мои теги — добавить интересы для более подходящего поиска.\n🚀 Mini App — полный интерфейс с корзиной и редактированием сообщений.\n\nРаскрытие контакта всегда одностороннее и происходит только после вашего действия.", { replyMarkup: MAIN_MENU, parseMode: "HTML" });
     return;
   }
   if (text === "💬 Пообщаться" || text === "/chat") {
@@ -390,7 +453,6 @@ async function handleTextMessage(message: TelegramMessage) {
     return;
   }
 
-  const flowState = await getFlowState(telegramId);
   if (flowState === "profile-name") {
     const name = text.slice(0, 120);
     await updateTelegramProfile(telegramId, { displayName: name });
@@ -468,7 +530,7 @@ async function handleCallbackQuery(query: TelegramCallbackQuery) {
     firstName: query.from.first_name,
   });
   await answerCallbackQuery(query.id);
-  await deleteMessage(chatId, message.message_id);
+  await clearTelegramChat(chatId, [message.message_id]);
 
   if (data === "history") {
     await showHistory(chatId, telegramId);

@@ -78,17 +78,20 @@
 }
 
 @layer components {
-  .mini-shell { min-height: 100dvh; background: var(--background); color: var(--foreground); }
-  .mini-topbar { padding-top: max(12px, env(safe-area-inset-top)); }
-  .mini-bottombar { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
-  .mini-card { border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); background: var(--card); box-shadow: 0 7px 22px color-mix(in srgb, #2d2745 7%, transparent); }
-  .mini-icon-btn { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 13px; border: 1px solid var(--border); background: var(--card); transition: transform .16s ease, background .16s ease, color .16s ease; }
+  .mini-shell { min-height: 100dvh; background: radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--mini-accent) 10%, transparent), transparent 28%), var(--background); color: var(--foreground); }
+  .mini-topbar { padding-top: max(12px, env(safe-area-inset-top)); box-shadow: 0 10px 28px color-mix(in srgb, #2d2745 5%, transparent); }
+  .mini-bottombar { padding-bottom: max(8px, env(safe-area-inset-bottom)); box-shadow: 0 -10px 28px color-mix(in srgb, #2d2745 5%, transparent); }
+  .mini-card { border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); background: color-mix(in srgb, var(--card) 96%, transparent); box-shadow: 0 7px 22px color-mix(in srgb, #2d2745 7%, transparent); transition: transform .18s cubic-bezier(.23,1,.32,1), box-shadow .18s ease, border-color .18s ease; }
+  .mini-card:active { transform: scale(.99); }
+  .mini-icon-btn { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 13px; border: 1px solid var(--border); background: var(--card); transition: transform .16s ease, background .16s ease, color .16s ease, border-color .16s ease; }
   .mini-icon-btn:active { transform: scale(.94); }
   .mini-icon-btn.active { color: #fff; border-color: transparent; background: var(--primary); }
+  .mini-icon-btn:disabled { cursor: not-allowed; opacity: .38; }
   .mini-scroll { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent; }
   .chat-bg-paper { background: radial-gradient(circle at 10% 8%, color-mix(in srgb, #fff 70%, transparent) 0 1px, transparent 2px), #f1eee7; background-size: 19px 19px; }
   .chat-bg-mist { background: linear-gradient(135deg, #e9eef5, #f8f8f6); }
   .chat-bg-peach { background: linear-gradient(135deg, #f9ede7, #fbf7ef); }
+  .chat-bg-night { background: linear-gradient(135deg, #1d2130, #292333); color: #f8f5ee; }
   .dark .chat-bg-paper { background: radial-gradient(circle at 10% 8%, #303341 0 1px, transparent 2px), #1c1f29; background-size: 19px 19px; }
   .dark .chat-bg-mist { background: #1d222d; }
   .dark .chat-bg-peach { background: #282129; }

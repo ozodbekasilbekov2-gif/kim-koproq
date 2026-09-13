@@ -38,6 +38,18 @@ export const telegramUsers = mysqlTable(
   table => [index("telegram_users_last_seen_idx").on(table.lastSeenAt)]
 );
 
+export const telegramChatMessages = mysqlTable(
+  "telegram_chat_messages",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    telegramChatId: varchar("telegramChatId", { length: 64 }).notNull(),
+    telegramMessageId: int("telegramMessageId").notNull(),
+    direction: mysqlEnum("direction", ["incoming", "outgoing"]).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("telegram_chat_message_unique").on(table.telegramChatId, table.telegramMessageId)]
+);
+
 export const userSettings = mysqlTable("telegram_user_settings", {
   id: int("id").autoincrement().primaryKey(),
   telegramUserId: varchar("telegramUserId", { length: 64 }).notNull().unique(),
@@ -141,6 +153,7 @@ export const contactReveals = mysqlTable(
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type TelegramUser = typeof telegramUsers.$inferSelect;
+export type TelegramChatMessage = typeof telegramChatMessages.$inferSelect;
 export type Chat = typeof chats.$inferSelect;
 export type ChatMember = typeof chatMembers.$inferSelect;
 export type ChatMessage = typeof messages.$inferSelect;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isTelegramWebhookAuthorized } from "./telegram";
+import { chunkTelegramMessageIds, isTelegramWebhookAuthorized } from "./telegram";
 
 describe("Telegram webhook authorization", () => {
   it("allows requests without a configured secret for local development", () => {
@@ -20,5 +20,12 @@ describe("Telegram webhook authorization", () => {
         "expected"
       )
     ).toBe(true);
+  });
+
+  it("splits tracked message ids into Telegram-safe batches of 100", () => {
+    const ids = Array.from({ length: 205 }, (_, index) => index + 1);
+    const chunks = chunkTelegramMessageIds(ids);
+    expect(chunks.map(chunk => chunk.length)).toEqual([100, 100, 5]);
+    expect(chunks.flat()).toEqual(ids);
   });
 });
