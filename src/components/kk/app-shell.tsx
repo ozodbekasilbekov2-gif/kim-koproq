@@ -151,16 +151,32 @@ export function AppShell({
 
   const handleLogout = async () => {
     try {
+      // Step 1: Get the CSRF token from NextAuth
+      const csrfRes = await fetch("/api/auth/csrf");
+      const csrfData = await csrfRes.json();
+      const csrfToken = csrfData.csrfToken;
+
+      // Step 2: Call signout with the CSRF token (must be form-encoded)
       await fetch("/api/auth/signout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csrfToken: "" }),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `csrfToken=${encodeURIComponent(csrfToken)}&callbackUrl=${encodeURIComponent("/")}&json=true`,
       }).catch(() => {});
     } catch {}
+
+    // Step 3: Clear local storage regardless of API result
     localStorage.removeItem("kk_session");
     localStorage.removeItem("kk_tg_token");
+    localStorage.removeItem("kk_guest_me_*");
+
+    // Step 4: Call parent's onLogout to reset state
     onLogout();
     toast.success("Tizimdan chiqdingiz");
+
+    // Step 5: Force page reload to clear all session state
+    if (typeof window !== "undefined") {
+      setTimeout(() => window.location.reload(), 300);
+    }
   };
 
   return (
