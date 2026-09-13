@@ -9,8 +9,6 @@ import { getDemoUserId, ensureDemoSeed } from "@/lib/demo-seed";
 // are always visible regardless of who's viewing).
 // Voter info (name, photo) is returned so the UI can show who voted.
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUserDb(req);
-  if (!user) return NextResponse.json({ error: "Auth required" }, { status: 401 });
   const setId = req.nextUrl.searchParams.get("setId");
   if (!setId) return NextResponse.json({ error: "setId?" }, { status: 400 });
 
@@ -23,8 +21,11 @@ export async function GET(req: NextRequest) {
 
   const set = await db.questionSet.findUnique({ where: { id: setId } });
   if (!set) return NextResponse.json({ error: "Set topilmadi" }, { status: 404 });
-  if (!set.isPublic && set.ownerId !== user.id) {
-    return NextResponse.json({ error: "Ruxsat yo'q" }, { status: 403 });
+
+  // Allow access for public sets (guests), require auth for private sets
+  const user = await getCurrentUserDb(req);
+  if (!set.isPublic && (!user || set.ownerId !== user.id)) {
+    return NextResponse.json({ error: "Ruxsat yo'q — bu set shaxsiy" }, { status: 403 });
   }
 
   const questions = await db.question.findMany({
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   ownerIds.add(set.ownerId); // the set's owner (has the questions + maybe avatars)
   const demoUserId = await getDemoUserId();
   if (demoUserId) ownerIds.add(demoUserId); // 27 demo 2AF1 members
-  ownerIds.add(user.id); // current user's own avatars
+  if (user) ownerIds.add(user.id); // current user's own avatars (if logged in)
 
   const avatars = await db.avatar.findMany({
     where: { ownerId: { in: Array.from(ownerIds) } },
