@@ -85,7 +85,39 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const votersSet = new Set(votes.map((v) => v.voterId));
+  // Also load guest votes (anonymous, from share-link users)
+  const guestVotes = await db.guestVote.findMany({
+    where: { setId },
+    select: {
+      guestToken: true,
+      guestName: true,
+      questionId: true,
+      groupId: true,
+      targetId: true,
+    },
+  });
+
+  // Merge guest votes into results
+  for (const gv of guestVotes) {
+    const byG = (results[gv.questionId] ||= {});
+    const byT = (byG[gv.groupId] ||= {});
+    // Use a guest-prefixed ID to distinguish from registered users
+    const guestVoterId = `guest:${gv.guestToken}`;
+    (byT[gv.targetId] ||= []).push(guestVoterId);
+
+    // Build guest voter info
+    if (!voterInfo[guestVoterId]) {
+      voterInfo[guestVoterId] = {
+        name: gv.guestName || "Mehmon",
+        photo: null, // guests don't have photos
+      };
+    }
+  }
+
+  const votersSet = new Set([
+    ...votes.map((v) => v.voterId),
+    ...guestVotes.map((gv) => `guest:${gv.guestToken}`),
+  ]);
   const totalMembers = avatars.length;
   const qCount = questions.length;
 
@@ -94,6 +126,12 @@ export async function GET(req: NextRequest) {
   for (const v of votes) {
     if (!perVoter.has(v.voterId)) perVoter.set(v.voterId, new Set());
     perVoter.get(v.voterId)!.add(v.questionId);
+  }
+  // Also count guest votes
+  for (const gv of guestVotes) {
+    const guestVoterId = `guest:${gv.guestToken}`;
+    if (!perVoter.has(guestVoterId)) perVoter.set(guestVoterId, new Set());
+    perVoter.get(guestVoterId)!.add(gv.questionId);
   }
   let completed = 0;
   for (const s of perVoter.values()) if (s.size >= qCount) completed++;

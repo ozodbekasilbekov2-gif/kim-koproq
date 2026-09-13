@@ -103,12 +103,31 @@ export function GuestMode({
       setAvatars(filteredAvatars);
       setGroups(filteredGroups);
 
-      // Load guest answers from localStorage
+      // Get or create a guest token (anonymous identifier per browser)
+      let guestToken = localStorage.getItem("kk_guest_token");
+      if (!guestToken) {
+        guestToken = `gt_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+        localStorage.setItem("kk_guest_token", guestToken);
+      }
+
+      // Load guest answers from server (using guestToken)
       try {
-        const key = `kk_guest_answers_${setId}`;
-        const raw = localStorage.getItem(key);
-        if (raw) setAnswers(JSON.parse(raw));
-      } catch {}
+        const res = await apiJson<{ answers: Record<string, Record<string, string>> }>(
+          `/api/guest-vote?setId=${setId}&guestToken=${encodeURIComponent(guestToken)}`
+        );
+        if (res.answers) {
+          setAnswers(res.answers);
+          // Also save to localStorage as backup
+          localStorage.setItem(`kk_guest_answers_${setId}`, JSON.stringify(res.answers));
+        }
+      } catch {
+        // Fallback: load from localStorage
+        try {
+          const key = `kk_guest_answers_${setId}`;
+          const raw = localStorage.getItem(key);
+          if (raw) setAnswers(JSON.parse(raw));
+        } catch {}
+      }
 
       // Load selected avatar from localStorage
       try {
@@ -136,7 +155,8 @@ export function GuestMode({
     } catch {}
   };
 
-  const pick = (questionId: string, groupId: string, avatarId: string | null) => {
+  const pick = async (questionId: string, groupId: string, avatarId: string | null) => {
+    // Update local state immediately for responsive UI
     setAnswers((prev) => {
       const cur = prev[questionId] || {};
       const next: Record<string, Record<string, string>> = {
@@ -148,6 +168,30 @@ export function GuestMode({
       } catch {}
       return next;
     });
+
+    // Send vote to server (async, non-blocking)
+    try {
+      const guestToken = localStorage.getItem("kk_guest_token");
+      if (!guestToken) return;
+
+      // Get the guest's name (use selected avatar's name if available)
+      const meAvatar = avatars.find((a) => a.id === me);
+      const guestName = meAvatar?.name || "Mehmon";
+
+      await apiJson("/api/guest-vote", {
+        method: "POST",
+        body: JSON.stringify({
+          guestToken,
+          guestName,
+          setId,
+          questionId,
+          targets: { [groupId]: avatarId },
+        }),
+      });
+    } catch (e) {
+      console.error("[guest] vote save failed:", e);
+      toast.error("Ovoz saqlanmadi — internet aloqasini tekshiring");
+    }
   };
 
   if (loading) {

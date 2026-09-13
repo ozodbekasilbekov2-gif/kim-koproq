@@ -92,6 +92,7 @@ model QuestionSet {
 
   questions   Question[]
   votes       Vote[]
+  guestVotes  GuestVote[]
 }
 
 model Question {
@@ -109,6 +110,7 @@ model Question {
   deletedBy  String?
 
   votes      Vote[]
+  guestVotes GuestVote[]
   history    QuestionHistory[]
 
   @@index([setId])
@@ -145,6 +147,7 @@ model Avatar {
   updatedAt  DateTime @default(now()) @updatedAt
 
   votes      Vote[]
+  guestVotes GuestVote[]
   tgBindings TelegramBinding[]
 
   @@index([groupId])
@@ -183,6 +186,29 @@ model Vote {
   @@unique([voterId, questionId, groupId])
   @@index([setId, questionId])
   @@index([voterId])
+}
+
+// ---------------- Guest Votes ----------------
+// Anonymous votes from unregistered users (via share links).
+// Stored separately so they don't require a User account.
+// guestToken identifies the browser/session (stored in localStorage).
+
+model GuestVote {
+  id         String   @id @default(cuid())
+  guestToken String   // anonymous identifier (localStorage per browser)
+  guestName  String?  // optional: name entered by guest
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  setId      String
+  set        QuestionSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  targetId   String   // avatar id voted for
+  target     Avatar   @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  groupId    String   // group color/tag
+  createdAt  DateTime @default(now())
+
+  @@unique([guestToken, questionId, groupId])
+  @@index([setId, questionId])
+  @@index([guestToken])
 }
 
 // ---------------- Telegram bot tables ----------------
