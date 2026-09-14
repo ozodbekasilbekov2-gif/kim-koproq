@@ -136,6 +136,9 @@ export function SetsPage({
         setId={openSetId}
         user={user}
         onBack={() => setOpenSetId(null)}
+        mode={mode}
+        selectedIds={selectedIds}
+        onClearSelection={onClearSelection}
       />
     );
   }
@@ -472,10 +475,16 @@ function SetDetailView({
   setId,
   user,
   onBack,
+  mode,
+  selectedIds,
+  onClearSelection,
 }: {
   setId: string;
   user: KKUser;
   onBack: () => void;
+  mode: ActionMode;
+  selectedIds: string[];
+  onClearSelection: () => void;
 }) {
   const [set, setSet] = useState<SetData | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -486,6 +495,12 @@ function SetDetailView({
   const [showShare, setShowShare] = useState(false);
   const [showEditSet, setShowEditSet] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [localSelectedIds, setLocalSelectedIds] = useState<string[]>(selectedIds);
+
+  // Sync local selection with parent
+  useEffect(() => {
+    setLocalSelectedIds(selectedIds);
+  }, [selectedIds]);
 
   // Listen for "go to results" event from TestView's completion screen
   useEffect(() => {
@@ -493,6 +508,42 @@ function SetDetailView({
     window.addEventListener("kk:goto-results", handler);
     return () => window.removeEventListener("kk:goto-results", handler);
   }, []);
+
+  // Handle universal action buttons when inside set detail
+  useEffect(() => {
+    if (mode === "create" && view === "questions") {
+      setShowAddQ(true);
+      onClearSelection();
+    }
+  }, [mode, view, onClearSelection]);
+
+  // Listen for confirm-delete event (from universal delete button)
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const detail = (e as CustomEvent).detail as { ids: string[] };
+      if (!detail?.ids?.length) return;
+      if (view === "questions") {
+        try {
+          await Promise.all(detail.ids.map((id) => apiJson(`/api/questions/${id}`, { method: "DELETE" })));
+          await load();
+          onClearSelection();
+          toast.success(`${detail.ids.length} ta savol o'chirildi`);
+        } catch (err: any) {
+          toast.error(err.message);
+        }
+      } else {
+        try {
+          await apiJson(`/api/sets/${setId}`, { method: "DELETE" });
+          toast.success("Set o'chirildi");
+          onBack();
+        } catch (err: any) {
+          toast.error(err.message);
+        }
+      }
+    };
+    window.addEventListener("kk:confirm-delete", handler);
+    return () => window.removeEventListener("kk:confirm-delete", handler);
+  }, [view, setId, onBack, onClearSelection]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -527,6 +578,14 @@ function SetDetailView({
   const isOwner = set.ownerId === user.id;
   const canEdit = isOwner || set.mode === "loose";
 
+  const toggleSelectQuestion = (qId: string) => {
+    if (localSelectedIds.includes(qId)) {
+      setLocalSelectedIds(localSelectedIds.filter((x) => x !== qId));
+    } else {
+      setLocalSelectedIds([...localSelectedIds, qId]);
+    }
+  };
+
   const deleteSet = async () => {
     try {
       await apiJson(`/api/sets/${setId}`, { method: "DELETE" });
@@ -560,26 +619,6 @@ function SetDetailView({
             title="Setni ulashish"
           >
             <Share2 className="w-4 h-4" /> Ulashish
-          </button>
-        )}
-        {/* Edit button — only for owner */}
-        {isOwner && (
-          <button
-            onClick={() => setShowEditSet(true)}
-            className="btn-ghost text-xs flex items-center gap-1"
-            title="Setni tahrirlash"
-          >
-            ✏️ Tahrirlash
-          </button>
-        )}
-        {/* Delete button — only for owner */}
-        {isOwner && (
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="btn-danger text-xs flex items-center gap-1"
-            title="Setni o'chirish"
-          >
-            🗑 O'chirish
           </button>
         )}
         <span
@@ -641,35 +680,44 @@ function SetDetailView({
         <div className="space-y-2">
           {questions.length === 0 && (
             <div className="text-center py-12 text-sm text-muted-foreground">
-              Hali savol yo'q. {canEdit ? "Birinchi savolni qo'shing" : "Egasi savol qo'shishini kuting"}
+              Hali savol yo'q. {canEdit ? "Yuqoridagi ➕ tugmasi orqali savol qo'shing" : "Egasi savol qo'shishini kuting"}
             </div>
           )}
-          {questions.map((q, i) => (
-            <div key={q.id} className="q-card p-3 flex items-center gap-3 fade-in" style={{ animationDelay: `${Math.min(i * 20, 300)}ms` }}>
-              <span className="text-2xl w-9 text-center shrink-0">{q.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium leading-snug">
-                  {i + 1}. {q.text}
+          {questions.map((q, i) => {
+            const isSelected = localSelectedIds.includes(q.id);
+            return (
+              <div
+                key={q.id}
+                className={`q-card p-3 flex items-center gap-3 fade-in ${
+                  isSelected ? "ring-2 ring-brand-lime" : ""
+                } ${mode === "delete" ? "border-brand-red/50" : ""}`}
+                style={{ animationDelay: `${Math.min(i * 20, 300)}ms` }}
+                onClick={() => {
+                  if (mode === "edit") {
+                    setEditingQ(q);
+                    onClearSelection();
+                  } else if (mode === "delete") {
+                    toggleSelectQuestion(q.id);
+                  }
+                }}
+              >
+                <span className="text-2xl w-9 text-center shrink-0">{q.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium leading-snug">
+                    {i + 1}. {q.text}
+                  </div>
+                  <span className={`pill cat-${String(q.category).split(" ")[0]} mt-1`}>
+                    {q.category}
+                  </span>
                 </div>
-                <span className={`pill cat-${String(q.category).split(" ")[0]} mt-1`}>
-                  {q.category}
-                </span>
+                {isSelected && (
+                  <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-brand-red text-white text-xs flex items-center justify-center">
+                    ✓
+                  </div>
+                )}
               </div>
-              {canEdit && (
-                <button
-                  onClick={() => setEditingQ(q)}
-                  className="text-muted-foreground hover:text-brand-lime p-2 rounded-lg hover:bg-white/5"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          ))}
-          {canEdit && (
-            <button onClick={() => setShowAddQ(true)} className="btn-primary w-full">
-              <Plus className="w-4 h-4 mr-1 inline" /> Savol qo'shish
-            </button>
-          )}
+            );
+          })}
         </div>
       )}
 
