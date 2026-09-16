@@ -87,6 +87,11 @@
   .mini-icon-btn:active { transform: scale(.94); }
   .mini-icon-btn.active { color: #fff; border-color: transparent; background: var(--primary); }
   .mini-icon-btn:disabled { cursor: not-allowed; opacity: .38; }
+  .mini-brand-mark { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex: 0 0 42px; border-radius: 13px; color: #111; background: linear-gradient(135deg, #a3e635 0%, #65a30d 55%, #facc15 100%); box-shadow: 0 0 18px rgba(163,230,53,.32); }
+  .mini-icon-btn:nth-child(1) { color: #111; background: #facc15; border-color: #f59e0b; }
+  .mini-icon-btn:nth-child(2) { color: #ef4444; background: color-mix(in srgb, #ef4444 15%, var(--card)); border-color: color-mix(in srgb, #ef4444 45%, var(--border)); }
+  .mini-icon-btn:nth-child(3) { color: #a3e635; border-color: color-mix(in srgb, #a3e635 45%, var(--border)); }
+  .mini-icon-btn:nth-child(4), .mini-icon-btn:nth-child(5) { color: var(--muted-foreground); }
   .mini-scroll { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent; }
   .chat-bg-paper { background: radial-gradient(circle at 10% 8%, color-mix(in srgb, #fff 70%, transparent) 0 1px, transparent 2px), #f1eee7; background-size: 19px 19px; }
   .chat-bg-mist { background: linear-gradient(135deg, #e9eef5, #f8f8f6); }

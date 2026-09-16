@@ -343,12 +343,8 @@ function TopBar({ page, inChat, trashMode, editMode, theme, onAdd, onTrash, onEd
   return (
     <header className="mini-topbar sticky top-0 z-30 border-b border-border/70 bg-background/95 px-4 pb-3 backdrop-blur-md">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          {inChat ? <button className="mini-icon-btn" onClick={onBack} aria-label="Назад"><ArrowLeft className="size-[18px]" /></button> : <div className="flex size-10 items-center justify-center rounded-2xl bg-[var(--mini-accent)] text-white"><ShieldCheck className="size-5" /></div>}
-          <div className="min-w-0">
-            <p className="truncate text-[17px] font-bold tracking-tight">{trashMode ? "Корзина" : inChat ? "Диалог" : page === "chats" ? "Чаты" : page === "profile" ? "Профиль" : "Настройки"}</p>
-            <p className="truncate text-[11px] text-muted-foreground">{trashMode ? "Долгое хранение удалённых данных" : inChat ? "Анонимное сообщение" : "Тихое пространство для общения"}</p>
-          </div>
+        <div className="min-w-0 flex-1">
+          <span className="sr-only">{trashMode ? "Корзина" : inChat ? "Диалог" : page === "chats" ? "Чаты" : page === "profile" ? "Профиль" : "Настройки"}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <TopAction icon={Plus} label="Добавить" onClick={onAdd} disabled={page === "settings" || inChat} />
@@ -356,6 +352,7 @@ function TopBar({ page, inChat, trashMode, editMode, theme, onAdd, onTrash, onEd
           <TopAction icon={editMode ? Check : Pencil} label="Изменить" active={editMode} onClick={onEdit} disabled={page === "settings"} />
           <TopAction icon={inChat ? ArrowLeft : MoreHorizontal} label="Назад" onClick={onBack} />
           <TopAction icon={theme === "dark" ? Sparkles : CircleHelp} label="Тема" onClick={onTheme} />
+          <div className="mini-brand-mark" aria-label="Анонимные чаты"><ShieldCheck className="size-5" /></div>
         </div>
       </div>
     </header>
@@ -369,11 +366,13 @@ function TopAction({ icon: Icon, label, onClick, active = false, disabled = fals
 function LongPressAction({ icon: Icon, label, onClick, onLongPress, active }: { icon: LucideIcon; label: string; onClick: () => void; onLongPress: () => void; active?: boolean }) {
   const started = useRef(0);
   const timer = useRef<number | undefined>(undefined);
+  const longPressed = useRef(false);
   const finish = () => {
     if (timer.current) window.clearTimeout(timer.current);
-    if (Date.now() - started.current < 550) onClick();
+    if (!longPressed.current && Date.now() - started.current < 550) onClick();
+    longPressed.current = false;
   };
-  return <button className={`mini-icon-btn ${active ? "active" : ""}`} onPointerDown={() => { started.current = Date.now(); timer.current = window.setTimeout(onLongPress, 550); }} onPointerUp={finish} onPointerLeave={() => timer.current && window.clearTimeout(timer.current)} aria-label={label} title={label}><Icon className="size-[18px]" /></button>;
+  return <button className={`mini-icon-btn ${active ? "active" : ""}`} onPointerDown={() => { started.current = Date.now(); longPressed.current = false; timer.current = window.setTimeout(() => { longPressed.current = true; onLongPress(); }, 550); }} onPointerUp={finish} onPointerCancel={finish} onPointerLeave={() => timer.current && window.clearTimeout(timer.current)} aria-label={label} title={label}><Icon className="size-[18px]" /></button>;
 }
 
 function ChatsPage({ chats, trashMode, selectedId, onSelect, onOpen, onRestore, onDelete, onMatch }: { chats: MiniChat[]; trashMode: boolean; selectedId: number | null; onSelect: (id: number | null) => void; onOpen: (chat: MiniChat) => void; onRestore: (chat: MiniChat) => void; onDelete: (chat: MiniChat) => void; onMatch: () => void }) {
@@ -400,7 +399,7 @@ function ChatRow({ chat, selected, trashMode, onOpen, onSelect, onRestore, onDel
       <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate font-bold">{chat.name}</p><span className={`size-2 rounded-full ${chat.status === "active" ? "bg-emerald-500" : "bg-slate-300"}`} /></div><p className="mt-1 truncate text-xs text-muted-foreground">{chat.sharedTags.length ? chat.sharedTags.map(tag => `#${tag}`).join(" · ") : "общих тегов пока нет"}</p></div>
       <div className="flex flex-col items-end gap-2 text-muted-foreground"><span className="text-[10px]">#{chat.id}</span><ChevronRight className="size-4" /></div>
     </div>
-    {selected && <div className="mt-3 flex items-center justify-end gap-2 border-t border-border pt-3"><button className="rounded-xl px-3 py-1.5 text-xs font-semibold text-[var(--mini-accent)]" onClick={trashMode ? onRestore : onSelect}>{trashMode ? "Восстановить" : "Выбрано"}</button><button className="rounded-xl bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive" onClick={onDelete}>{trashMode ? "Удалить навсегда" : "В корзину"}</button></div>}
+    {selected && <div className="mt-3 flex items-center justify-end gap-2 border-t border-border pt-3"><button className="rounded-xl px-3 py-1.5 text-xs font-semibold text-[var(--mini-accent)]" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); trashMode ? onRestore() : onSelect(); }}>{trashMode ? "Восстановить" : "Выбрано"}</button><button className="rounded-xl bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive" onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); onDelete(); }}>{trashMode ? "Удалить навсегда" : "В корзину"}</button></div>}
   </article>;
 }
 
